@@ -1,0 +1,475 @@
+/* 智能充电桩调度计费系统 - 主样式 */
+
+/* 全局重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* 导航栏样式 */
+.navbar {
+    background-color: #1976d2;
+    color: white;
+    padding: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+    text-decoration: none;
+}
+
+.navbar-menu {
+    display: flex;
+    list-style: none;
+}
+
+.navbar-menu li {
+    margin-left: 20px;
+}
+
+.navbar-menu a {
+    color: white;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.navbar-menu a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.navbar-menu a.active {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 卡片样式 */
+.card {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.card-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #1976d2;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* 表单样式 */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+}
+
+.btn:hover {
+    background-color: #1565c0;
+}
+
+.btn:disabled {
+    background-color: #bbb;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background-color: #757575;
+}
+
+.btn-secondary:hover {
+    background-color: #616161;
+}
+
+.btn-success {
+    background-color: #4caf50;
+}
+
+.btn-success:hover {
+    background-color: #43a047;
+}
+
+.btn-danger {
+    background-color: #f44336;
+}
+
+.btn-danger:hover {
+    background-color: #d32f2f;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.875rem;
+}
+
+/* 表格样式 */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th,
+.table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.table th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+}
+
+.table tr:hover {
+    background-color: #f9f9f9;
+}
+
+/* 加载样式 */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 警告和错误消息 */
+.alert {
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.alert-success {
+    background-color: #dff0d8;
+    color: #3c763d;
+    border: 1px solid #d6e9c6;
+}
+
+.alert-danger {
+    background-color: #f2dede;
+    color: #a94442;
+    border: 1px solid #ebccd1;
+}
+
+.alert-warning {
+    background-color: #fcf8e3;
+    color: #8a6d3b;
+    border: 1px solid #faebcc;
+}
+
+.alert-info {
+    background-color: #d9edf7;
+    color: #31708f;
+    border: 1px solid #bce8f1;
+}
+
+/* 徽章 */
+.badge {
+    display: inline-block;
+    padding: 3px 7px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 10px;
+}
+
+.badge-primary {
+    background-color: #1976d2;
+    color: white;
+}
+
+.badge-success {
+    background-color: #4caf50;
+    color: white;
+}
+
+.badge-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.badge-warning {
+    background-color: #ff9800;
+    color: white;
+}
+
+/* 页面主内容 */
+.main-content {
+    padding: 30px 0;
+}
+
+/* 页脚 */
+.footer {
+    background-color: #f5f5f5;
+    padding: 20px 0;
+    text-align: center;
+    border-top: 1px solid #ddd;
+    margin-top: 40px;
+}
+
+/* 充电状态指示器 */
+.charge-progress {
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.charge-progress-bar {
+    height: 100%;
+    background-color: #4caf50;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+/* 充电模式标签 */
+.charge-mode {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.charge-mode-fast {
+    background-color: #ff9800;
+    color: white;
+}
+
+.charge-mode-slow {
+    background-color: #2196f3;
+    color: white;
+}
+
+/* 状态标签 */
+.status-label {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.status-waiting {
+    background-color: #ff9800;
+    color: white;
+}
+
+.status-queuing {
+    background-color: #2196f3;
+    color: white;
+}
+
+.status-charging {
+    background-color: #4caf50;
+    color: white;
+}
+
+.status-finished {
+    background-color: #9e9e9e;
+    color: white;
+}
+
+.status-canceled {
+    background-color: #f44336;
+    color: white;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+    .navbar-menu {
+        display: none;
+    }
+    
+    .table-responsive {
+        overflow-x: auto;
+    }
+}
+
+/* 表格内的操作按钮 */
+.action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+/* 标签 */
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* 图表容器 */
+.chart-container {
+    width: 100%;
+    height: 300px;
+    margin: 20px 0;
+}
+
+/* 分页控件 */
+.pagination {
+    display: flex;
+    list-style: none;
+    margin: 20px 0;
+    justify-content: center;
+}
+
+.pagination li {
+    margin: 0 5px;
+}
+
+.pagination a {
+    display: inline-block;
+    padding: 5px 10px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #1976d2;
+}
+
+.pagination a:hover {
+    background-color: #f5f5f5;
+}
+
+.pagination .active a {
+    background-color: #1976d2;
+    color: white;
+    border-color: #1976d2;
+}
+
+/* 登录页面样式 */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f5f5f5;
+}
+
+.login-form {
+    width: 100%;
+    max-width: 400px;
+    padding: 40px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.login-form .card-title {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 30px;
+}
+
+.login-form .btn {
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* 网格布局 */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-gap: 20px;
+}
+
+.col-1 { grid-column: span 1; }
+.col-2 { grid-column: span 2; }
+.col-3 { grid-column: span 3; }
+.col-4 { grid-column: span 4; }
+.col-5 { grid-column: span 5; }
+.col-6 { grid-column: span 6; }
+.col-7 { grid-column: span 7; }
+.col-8 { grid-column: span 8; }
+.col-9 { grid-column: span 9; }
+.col-10 { grid-column: span 10; }
+.col-11 { grid-column: span 11; }
+.col-12 { grid-column: span 12; }
+
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+    
+    [class*="col-"] {
+        grid-column: span 12;
+    }
+} 

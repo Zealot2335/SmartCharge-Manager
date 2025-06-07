@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>充电请求详情 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1 class="card-title">充电请求详情</h1>
+                    <div>
+                        <a href="/user/requests.html" class="btn btn-secondary">返回列表</a>
+                        <button id="refresh-btn" class="btn">刷新数据</button>
+                    </div>
+                </div>
+                
+                <div id="request-details" class="loading-container">
+                    <p>正在加载请求详情...</p>
+                </div>
+            </div>
+            
+            <div class="card" id="charging-status-card" style="margin-top: 20px; display: none;">
+                <h2 class="card-title">充电状态</h2>
+                <div id="charging-status" class="loading-container">
+                    <p>正在加载充电状态...</p>
+                </div>
+            </div>
+            
+            <div class="card" id="bill-card" style="margin-top: 20px; display: none;">
+                <h2 class="card-title">账单信息</h2>
+                <div id="bill-details" class="loading-container">
+                    <p>正在加载账单信息...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script>
+        // 获取请求ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestId = urlParams.get('id');
+        
+        // 充电会话ID
+        let sessionId = null;
+        
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 检查授权
+            if (!Utils.checkAuth()) {
+                return;
+            }
+            
+            // 初始化页面
+            Utils.initPage();
+            
+            // 检查请求ID
+            if (!requestId) {
+                showError('请求ID不能为空');
+                return;
+            }
+            
+            // 加载请求详情
+            loadRequestDetails();
+            
+            // 绑定刷新按钮
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    loadRequestDetails();
+                    if (sessionId) {
+                        loadChargingStatus();
+                    }
+                });
+            }
+            
+            // 连接WebSocket
+            setupWebSocket();
+        });
+        
+        // 加载请求详情
+        async function loadRequestDetails() {
+            const detailsContainer = document.getElementById('request-details');
+            
+            try {
+                // 获取请求详情
+                const request = await API.charging.getRequestDetails(requestId);
+                
+                // 显示请求详情
+                let html = `
+                    <div class="request-info">
+                        <div class="grid">
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>排队号码:</label>
+                                    <span>${request.queue_number || '-'}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电模式:</label>
+                                    <span>${Utils.getChargeModeName(request.mode)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>请求充电量:</label>
+                                    <span>${Utils.formatKwh(request.amount_kwh)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>电池容量:</label>
+                                    <span>${Utils.formatKwh(request.battery_capacity)}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>状态:</label>
+                                    <span class="status-label status-${request.status.toLowerCase()}">${Utils.getRequestStatusName(request.status)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电桩:</label>
+                                    <span>${request.pile_code || '-'}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>请求时间:</label>
+                                    <span>${Utils.formatDate(request.request_time, 'YYYY-MM-DD HH:mm:ss')}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>开始充电时间:</label>
+                                    <span>${request.start_time ? Utils.formatDate(request.start_time, 'YYYY-MM-DD HH:mm:ss') : '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 添加操作按钮
+                if (request.status === 'WAITING' || request.status === 'QUEUING') {
+                    html += `
+                        <div class="actions" style="margin-top: 20px;">
+                            <button id="cancel-btn" class="btn btn-danger">取消请求</button>
+                        </div>
+                    `;
+                }
+                
+                detailsContainer.innerHTML = html;
+                
+                // 绑定取消按钮
+                const cancelBtn = document.getElementById('cancel-btn');
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', () => cancelRequest(requestId));
+                }
+                
+                // 如果正在充电或已完成，显示充电状态
+                if (request.status === 'CHARGING' || request.status === 'FINISHED') {
+                    document.getElementById('charging-status-card').style.display = 'block';
+                    loadChargingStatus();
+                }
+                
+                // 如果已完成，显示账单信息
+                if (request.status === 'FINISHED') {
+                    document.getElementById('bill-card').style.display = 'block';
+                    loadBillDetails();
+                }
+                
+                // 保存会话ID
+                if (request.session_id) {
+                    sessionId = request.session_id;
+                }
+            } catch (error) {
+                console.error('加载请求详情失败:', error);
+                detailsContainer.innerHTML = '<p class="error">加载请求详情失败，请稍后再试</p>';
+            }
+        }
+        
+        // 加载充电状态
+        async function loadChargingStatus() {
+            const statusContainer = document.getElementById('charging-status');
+            
+            try {
+                // 获取充电状态
+                const status = await API.charging.getChargeState(requestId);
+                
+                // 显示充电状态
+                let html = `
+                    <div class="charging-info">
+                        <div class="grid">
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>充电进度:</label>
+                                    <div class="charge-progress">
+                                        <div class="charge-progress-bar" style="width: ${status.progress}%"></div>
+                                    </div>
+                                    <span>${status.progress.toFixed(1)}%</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>已充电量:</label>
+                                    <span>${Utils.formatKwh(status.charged_kwh)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>剩余电量:</label>
+                                    <span>${Utils.formatKwh(status.remaining_kwh)}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>充电时长:</label>
+                                    <span>${Utils.formatMinutes(status.charging_minutes)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>预计剩余时间:</label>
+                                    <span>${Utils.formatMinutes(status.estimated_remaining_minutes)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>预计费用:</label>
+                                    <span>¥${Utils.formatMoney(status.estimated_fee)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                statusContainer.innerHTML = html;
+            } catch (error) {
+                console.error('加载充电状态失败:', error);
+                statusContainer.innerHTML = '<p class="error">加载充电状态失败，请稍后再试</p>';
+            }
+        }
+        
+        // 加载账单详情
+        async function loadBillDetails() {
+            const billContainer = document.getElementById('bill-details');
+            
+            try {
+                // 获取账单详情
+                const bill = await API.billing.getBillDetails(sessionId);
+                
+                // 显示账单详情
+                let html = `
+                    <div class="bill-info">
+                        <div class="grid">
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>详单编号:</label>
+                                    <span>${bill.detail_number}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电桩:</label>
+                                    <span>${bill.pile_code}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电量:</label>
+                                    <span>${Utils.formatKwh(bill.charged_kwh)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电时长:</label>
+                                    <span>${Utils.formatMinutes(bill.charging_time)}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>开始时间:</label>
+                                    <span>${Utils.formatDate(bill.start_time, 'YYYY-MM-DD HH:mm:ss')}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>结束时间:</label>
+                                    <span>${Utils.formatDate(bill.end_time, 'YYYY-MM-DD HH:mm:ss')}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电费用:</label>
+                                    <span>¥${Utils.formatMoney(bill.charge_fee)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>服务费用:</label>
+                                    <span>¥${Utils.formatMoney(bill.service_fee)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>总费用:</label>
+                                    <span class="total-fee">¥${Utils.formatMoney(bill.total_fee)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                billContainer.innerHTML = html;
+            } catch (error) {
+                console.error('加载账单详情失败:', error);
+                billContainer.innerHTML = '<p class="error">加载账单详情失败，请稍后再试</p>';
+            }
+        }
+        
+        // 取消请求
+        async function cancelRequest(requestId) {
+            if (!confirm('确定要取消该充电请求吗？')) {
+                return;
+            }
+            
+            try {
+                // 禁用按钮
+                const cancelBtn = document.getElementById('cancel-btn');
+                if (cancelBtn) {
+                    cancelBtn.disabled = true;
+                    cancelBtn.textContent = '取消中...';
+                }
+                
+                // 取消请求
+                await API.charging.cancelRequest(requestId);
+                
+                // 成功提示
+                Utils.showNotification('充电请求已取消', 'success');
+                
+                // 重新加载请求详情
+                loadRequestDetails();
+            } catch (error) {
+                console.error('取消充电请求失败:', error);
+                Utils.showNotification('取消充电请求失败: ' + error.message, 'danger');
+                
+                // 启用按钮
+                const cancelBtn = document.getElementById('cancel-btn');
+                if (cancelBtn) {
+                    cancelBtn.disabled = false;
+                    cancelBtn.textContent = '取消请求';
+                }
+            }
+        }
+        
+        // 显示错误信息
+        function showError(message) {
+            const detailsContainer = document.getElementById('request-details');
+            detailsContainer.innerHTML = `<p class="error">${message}</p>`;
+        }
+        
+        // 设置WebSocket
+        function setupWebSocket() {
+            // 监听充电状态变化
+            wsClient.on('charge_status_change', (data) => {
+                if (data.request_id === parseInt(requestId)) {
+                    // 重新加载请求详情和充电状态
+                    loadRequestDetails();
+                    if (sessionId) {
+                        loadChargingStatus();
+                    }
+                }
+            });
+            
+            // 监听充电完成
+            wsClient.on('charge_completed', (data) => {
+                if (data.request_id === parseInt(requestId)) {
+                    // 重新加载请求详情
+                    loadRequestDetails();
+                    
+                    // 显示通知
+                    Utils.showNotification('充电已完成，请查看账单', 'success');
+                }
+            });
+        }
+    </script>
+    
+    <style>
+        .info-group {
+            margin-bottom: 15px;
+        }
+        
+        .info-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        
+        .total-fee {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #f44336;
+        }
+        
+        .error {
+            color: #f44336;
+        }
+        
+        .loading-container {
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-header {
+            margin-bottom: 20px;
+        }
+    </style>
+</body>
+</html> 

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的充电请求 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <h1 class="card-title">我的充电请求</h1>
+                
+                <div class="actions" style="margin-bottom: 20px;">
+                    <button id="new-request-btn" class="btn">新建充电请求</button>
+                </div>
+                
+                <div class="filters" style="margin-bottom: 20px;">
+                    <div class="grid">
+                        <div class="col-3">
+                            <select id="status-filter" class="form-control">
+                                <option value="">全部状态</option>
+                                <option value="WAITING">等候中</option>
+                                <option value="QUEUING">排队中</option>
+                                <option value="CHARGING">充电中</option>
+                                <option value="FINISHED">已完成</option>
+                                <option value="CANCELED">已取消</option>
+                            </select>
+                        </div>
+                        <div class="col-3">
+                            <select id="mode-filter" class="form-control">
+                                <option value="">全部模式</option>
+                                <option value="FAST">快充</option>
+                                <option value="SLOW">慢充</option>
+                            </select>
+                        </div>
+                        <div class="col-3">
+                            <button id="filter-btn" class="btn btn-secondary">筛选</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>排队号</th>
+                                <th>充电模式</th>
+                                <th>请求量(kWh)</th>
+                                <th>状态</th>
+                                <th>充电桩</th>
+                                <th>请求时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requests-table-body">
+                            <!-- 由JS动态填充 -->
+                            <tr>
+                                <td colspan="7" class="text-center">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 新建请求模态框 -->
+    <div id="new-request-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>新建充电请求</h2>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="new-request-form">
+                    <div class="form-group">
+                        <label for="request-mode">充电模式</label>
+                        <select id="request-mode" class="form-control" required>
+                            <option value="FAST">快充</option>
+                            <option value="SLOW">慢充</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="request-battery-capacity">电池容量 (kWh)</label>
+                        <input type="number" id="request-battery-capacity" class="form-control" min="10" max="100" value="60" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="request-amount-kwh">充电量 (kWh)</label>
+                        <input type="number" id="request-amount-kwh" class="form-control" min="1" max="60" value="10" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" class="btn">提交请求</button>
+                        <button type="button" class="btn btn-secondary cancel-modal">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script>
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 检查授权
+            if (!Utils.checkAuth()) {
+                return;
+            }
+            
+            // 初始化页面
+            Utils.initPage();
+            
+            // 加载充电请求
+            loadRequests();
+            
+            // 绑定事件
+            bindEvents();
+            
+            // 连接WebSocket
+            setupWebSocket();
+        });
+        
+        // 加载充电请求
+        async function loadRequests() {
+            const tableBody = document.getElementById('requests-table-body');
+            const statusFilter = document.getElementById('status-filter').value;
+            const modeFilter = document.getElementById('mode-filter').value;
+            
+            try {
+                // 获取充电请求
+                const requests = await API.charging.getUserRequests(statusFilter);
+                
+                // 根据模式筛选
+                const filteredRequests = modeFilter
+                    ? requests.filter(req => req.mode === modeFilter)
+                    : requests;
+                
+                // 显示充电请求
+                if (filteredRequests.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">暂无充电请求</td></tr>';
+                    return;
+                }
+                
+                // 构建表格行
+                let html = '';
+                
+                filteredRequests.forEach(request => {
+                    html += `
+                        <tr data-id="${request.id}">
+                            <td>${request.queue_number || '-'}</td>
+                            <td>${Utils.getChargeModeName(request.mode)}</td>
+                            <td>${Utils.formatKwh(request.amount_kwh)}</td>
+                            <td>${createStatusCell(request.status)}</td>
+                            <td>${request.pile_code || '-'}</td>
+                            <td>${Utils.formatDate(request.request_time, 'YYYY-MM-DD HH:mm')}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn btn-sm view-btn" data-id="${request.id}">查看</button>
+                                    ${request.status === 'WAITING' || request.status === 'QUEUING'
+                                        ? `<button class="btn btn-sm btn-danger cancel-btn" data-id="${request.id}">取消</button>`
+                                        : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableBody.innerHTML = html;
+                
+                // 绑定操作按钮事件
+                bindActionButtons();
+            } catch (error) {
+                console.error('加载充电请求失败:', error);
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center">加载充电请求失败，请稍后再试</td></tr>';
+            }
+        }
+        
+        // 创建状态单元格
+        function createStatusCell(status) {
+            let statusClass = '';
+            let statusText = '';
+            
+            switch (status) {
+                case 'WAITING':
+                    statusClass = 'status-waiting';
+                    statusText = '等候中';
+                    break;
+                case 'QUEUING':
+                    statusClass = 'status-queuing';
+                    statusText = '排队中';
+                    break;
+                case 'CHARGING':
+                    statusClass = 'status-charging';
+                    statusText = '充电中';
+                    break;
+                case 'FINISHED':
+                    statusClass = 'status-finished';
+                    statusText = '已完成';
+                    break;
+                case 'CANCELED':
+                    statusClass = 'status-canceled';
+                    statusText = '已取消';
+                    break;
+                default:
+                    statusClass = '';
+                    statusText = status;
+            }
+            
+            return `<span class="status-label ${statusClass}">${statusText}</span>`;
+        }
+        
+        // 绑定事件
+        function bindEvents() {
+            // 新建请求按钮
+            const newRequestBtn = document.getElementById('new-request-btn');
+            if (newRequestBtn) {
+                newRequestBtn.addEventListener('click', () => {
+                    const modal = document.getElementById('new-request-modal');
+                    modal.style.display = 'block';
+                });
+            }
+            
+            // 关闭模态框
+            const closeModal = document.querySelector('.close-modal');
+            if (closeModal) {
+                closeModal.addEventListener('click', () => {
+                    const modal = document.getElementById('new-request-modal');
+                    modal.style.display = 'none';
+                });
+            }
+            
+            // 取消按钮
+            const cancelModalBtns = document.querySelectorAll('.cancel-modal');
+            cancelModalBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const modal = document.getElementById('new-request-modal');
+                    modal.style.display = 'none';
+                });
+            });
+            
+            // 新建请求表单
+            const newRequestForm = document.getElementById('new-request-form');
+            if (newRequestForm) {
+                newRequestForm.addEventListener('submit', handleNewRequest);
+            }
+            
+            // 筛选按钮
+            const filterBtn = document.getElementById('filter-btn');
+            if (filterBtn) {
+                filterBtn.addEventListener('click', loadRequests);
+            }
+        }
+        
+        // 绑定操作按钮事件
+        function bindActionButtons() {
+            // 查看按钮
+            const viewBtns = document.querySelectorAll('.view-btn');
+            viewBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const requestId = btn.getAttribute('data-id');
+                    window.location.href = `/user/request.html?id=${requestId}`;
+                });
+            });
+            
+            // 取消按钮
+            const cancelBtns = document.querySelectorAll('.cancel-btn');
+            cancelBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('确定要取消该充电请求吗？')) {
+                        return;
+                    }
+                    
+                    const requestId = btn.getAttribute('data-id');
+                    
+                    try {
+                        // 禁用按钮
+                        btn.disabled = true;
+                        btn.textContent = '取消中...';
+                        
+                        // 取消请求
+                        await API.charging.cancelRequest(requestId);
+                        
+                        // 成功提示
+                        Utils.showNotification('充电请求已取消', 'success');
+                        
+                        // 重新加载请求
+                        loadRequests();
+                    } catch (error) {
+                        console.error('取消充电请求失败:', error);
+                        Utils.showNotification('取消充电请求失败: ' + error.message, 'danger');
+                        
+                        // 启用按钮
+                        btn.disabled = false;
+                        btn.textContent = '取消';
+                    }
+                });
+            });
+        }
+        
+        // 处理新建请求
+        async function handleNewRequest(event) {
+            event.preventDefault();
+            
+            // 获取表单数据
+            const mode = document.getElementById('request-mode').value;
+            const batteryCapacity = parseFloat(document.getElementById('request-battery-capacity').value);
+            const amountKwh = parseFloat(document.getElementById('request-amount-kwh').value);
+            
+            // 验证数据
+            if (isNaN(batteryCapacity) || batteryCapacity <= 0) {
+                Utils.showNotification('请输入有效的电池容量', 'danger');
+                return;
+            }
+            
+            if (isNaN(amountKwh) || amountKwh <= 0) {
+                Utils.showNotification('请输入有效的充电量', 'danger');
+                return;
+            }
+            
+            if (amountKwh > batteryCapacity) {
+                Utils.showNotification('充电量不能超过电池容量', 'danger');
+                return;
+            }
+            
+            try {
+                // 禁用表单
+                const submitBtn = event.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading"></span> 提交中...';
+                
+                // 提交请求
+                const requestData = {
+                    mode,
+                    battery_capacity: batteryCapacity,
+                    amount_kwh: amountKwh
+                };
+                
+                const result = await API.charging.createRequest(requestData);
+                
+                // 成功提示
+                Utils.showNotification('充电请求已提交，排队号码: ' + result.queue_number, 'success');
+                
+                // 关闭模态框
+                const modal = document.getElementById('new-request-modal');
+                modal.style.display = 'none';
+                
+                // 重新加载请求
+                loadRequests();
+            } catch (error) {
+                console.error('提交充电请求失败:', error);
+                Utils.showNotification('提交充电请求失败: ' + error.message, 'danger');
+                
+                // 启用表单
+                const submitBtn = event.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交请求';
+            }
+        }
+        
+        // 设置WebSocket
+        function setupWebSocket() {
+            // 监听充电状态变化
+            wsClient.on('charge_status_change', (data) => {
+                // 重新加载请求
+                loadRequests();
+            });
+            
+            // 监听队列更新
+            wsClient.on('queue_update', (data) => {
+                // 重新加载请求
+                loadRequests();
+            });
+        }
+    </script>
+    
+    <style>
+        /* 模态框样式 */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 500px;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .close-modal {
+            cursor: pointer;
+            font-size: 24px;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+    </style>
+</body>
+</html> 

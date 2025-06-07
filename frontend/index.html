@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div id="welcome-section">
+                <div class="card">
+                    <h1 class="card-title">欢迎使用智能充电桩调度计费系统</h1>
+                    <p>本系统提供电动汽车充电服务的全流程管理，包括充电请求、智能调度、充电监控和费用结算。</p>
+                    
+                    <div class="actions" style="margin-top: 20px;">
+                        <a href="user/requests.html" id="request-btn" class="btn" style="margin-right: 10px;">我的充电请求</a>
+                        <a href="login.html" id="login-btn" class="btn btn-secondary">登录系统</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid" style="margin-top: 30px;">
+                <div class="col-4">
+                    <div class="card">
+                        <h2 class="card-title">充电状态</h2>
+                        <div id="status-container">
+                            <p>正在加载充电状态...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="card">
+                        <h2 class="card-title">快充队列</h2>
+                        <div id="fast-queue-container">
+                            <p>正在加载队列信息...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="card">
+                        <h2 class="card-title">慢充队列</h2>
+                        <div id="slow-queue-container">
+                            <p>正在加载队列信息...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 30px;">
+                <h2 class="card-title">快速充电请求</h2>
+                <form id="quick-charge-form">
+                    <div class="grid">
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label for="charge-mode">充电模式</label>
+                                <select id="charge-mode" class="form-control">
+                                    <option value="FAST">快充</option>
+                                    <option value="SLOW">慢充</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label for="battery-capacity">电池容量 (kWh)</label>
+                                <input type="number" id="battery-capacity" class="form-control" min="10" max="100" value="60">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label for="amount-kwh">充电量 (kWh)</label>
+                                <input type="number" id="amount-kwh" class="form-control" min="1" max="60" value="10">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label>&nbsp;</label>
+                                <button type="submit" class="btn form-control">提交充电请求</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="static/js/api.js"></script>
+    <script src="static/js/utils.js"></script>
+    <script src="static/js/websocket.js"></script>
+    <script>
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化页面
+            Utils.initPage();
+            
+            // 检查登录状态
+            const isLoggedIn = API.auth.isLoggedIn();
+            const isAdmin = API.auth.isAdmin();
+            
+            // 更新欢迎区域
+            updateWelcomeSection(isLoggedIn, isAdmin);
+            
+            // 加载充电状态
+            loadChargingStatus();
+            
+            // 加载队列信息
+            loadQueueInfo('FAST');
+            loadQueueInfo('SLOW');
+            
+            // 绑定表单提交事件
+            const quickChargeForm = document.getElementById('quick-charge-form');
+            if (quickChargeForm) {
+                quickChargeForm.addEventListener('submit', handleQuickChargeSubmit);
+            }
+            
+            // 如果用户已登录，连接WebSocket
+            if (isLoggedIn) {
+                setupWebSocket();
+            }
+        });
+        
+        // 更新欢迎区域
+        function updateWelcomeSection(isLoggedIn, isAdmin) {
+            const requestBtn = document.getElementById('request-btn');
+            const loginBtn = document.getElementById('login-btn');
+            
+            if (isLoggedIn) {
+                loginBtn.style.display = 'none';
+                
+                if (isAdmin) {
+                    requestBtn.textContent = '管理控制台';
+                    requestBtn.href = '/admin/index.html';
+                } else {
+                    requestBtn.textContent = '我的充电请求';
+                    requestBtn.href = '/user/requests.html';
+                }
+            } else {
+                requestBtn.style.display = 'none';
+            }
+        }
+        
+        // 加载充电状态
+        async function loadChargingStatus() {
+            const statusContainer = document.getElementById('status-container');
+            
+            try {
+                // 获取充电桩信息
+                const piles = await API.admin.getPiles();
+                
+                // 显示充电桩状态
+                let html = '<div class="grid">';
+                
+                piles.forEach(pile => {
+                    const statusClass = `status-${pile.status.toLowerCase()}`;
+                    
+                    html += `
+                        <div class="col-6" style="margin-bottom: 10px;">
+                            <div class="pile-item">
+                                <h3>${pile.code}号桩 (${pile.type === 'FAST' ? '快充' : '慢充'})</h3>
+                                <div class="pile-status ${statusClass}">
+                                    ${Utils.getPileStatusName(pile.status)}
+                                </div>
+                                <div class="pile-info">
+                                    <p>功率: ${pile.power} kW</p>
+                                    <p>累计充电: ${pile.total_charge_count}次</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                statusContainer.innerHTML = html;
+            } catch (error) {
+                console.error('加载充电状态失败:', error);
+                statusContainer.innerHTML = '<p class="error">加载充电状态失败，请稍后再试</p>';
+            }
+        }
+        
+        // 加载队列信息
+        async function loadQueueInfo(mode) {
+            const containerId = `${mode.toLowerCase()}-queue-container`;
+            const container = document.getElementById(containerId);
+            
+            try {
+                // 获取队列信息
+                const queueInfo = await API.charging.getQueueInfo(mode);
+                
+                // 显示队列信息
+                let html = '';
+                
+                html += `
+                    <div class="queue-summary">
+                        <p>等候区: <span class="badge badge-primary">${queueInfo.waiting_count}辆</span></p>
+                        <p>充电区: <span class="badge badge-success">${queueInfo.charging_count}辆</span></p>
+                        <p>排队中: <span class="badge badge-warning">${queueInfo.queuing_count}辆</span></p>
+                    </div>
+                    
+                    <h3 style="margin-top: 15px;">充电桩队列</h3>
+                    <div class="queue-details">
+                `;
+                
+                // 显示每个充电桩的队列
+                for (const [pileCode, pileQueue] of Object.entries(queueInfo.pile_queues)) {
+                    html += `
+                        <div class="pile-queue">
+                            <h4>${pileCode}号桩</h4>
+                            <p>充电中: ${pileQueue.charging}辆, 排队中: ${pileQueue.queuing}辆</p>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error(`加载${mode}队列信息失败:`, error);
+                container.innerHTML = `<p class="error">加载${mode === 'FAST' ? '快充' : '慢充'}队列信息失败，请稍后再试</p>`;
+            }
+        }
+        
+        // 处理快速充电表单提交
+        async function handleQuickChargeSubmit(event) {
+            event.preventDefault();
+            
+            // 检查是否已登录
+            if (!API.auth.isLoggedIn()) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            // 获取表单数据
+            const mode = document.getElementById('charge-mode').value;
+            const batteryCapacity = parseFloat(document.getElementById('battery-capacity').value);
+            const amountKwh = parseFloat(document.getElementById('amount-kwh').value);
+            
+            // 验证数据
+            if (isNaN(batteryCapacity) || batteryCapacity <= 0) {
+                Utils.showNotification('请输入有效的电池容量', 'danger');
+                return;
+            }
+            
+            if (isNaN(amountKwh) || amountKwh <= 0) {
+                Utils.showNotification('请输入有效的充电量', 'danger');
+                return;
+            }
+            
+            if (amountKwh > batteryCapacity) {
+                Utils.showNotification('充电量不能超过电池容量', 'danger');
+                return;
+            }
+            
+            try {
+                // 禁用表单
+                const submitBtn = event.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading"></span> 提交中...';
+                
+                // 提交请求
+                const requestData = {
+                    mode,
+                    battery_capacity: batteryCapacity,
+                    amount_kwh: amountKwh
+                };
+                
+                const result = await API.charging.createRequest(requestData);
+                
+                // 成功提示
+                Utils.showNotification('充电请求已提交，排队号码: ' + result.queue_number, 'success');
+                
+                // 重定向到请求详情页
+                setTimeout(() => {
+                    window.location.href = `/user/request.html?id=${result.id}`;
+                }, 1500);
+            } catch (error) {
+                console.error('提交充电请求失败:', error);
+                Utils.showNotification('提交充电请求失败: ' + error.message, 'danger');
+                
+                // 启用表单
+                const submitBtn = event.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交充电请求';
+            }
+        }
+        
+        // 设置WebSocket
+        function setupWebSocket() {
+            // 监听充电状态变化
+            wsClient.on('charge_status_change', (data) => {
+                // 刷新充电状态
+                loadChargingStatus();
+            });
+            
+            // 监听队列更新
+            wsClient.on('queue_update', (data) => {
+                // 刷新队列信息
+                loadQueueInfo(data.mode);
+            });
+            
+            // 监听充电桩状态变化
+            wsClient.on('pile_status_change', (data) => {
+                // 刷新充电状态
+                loadChargingStatus();
+            });
+        }
+    </script>
+</body>
+</html> 
