@@ -110,7 +110,7 @@ class ChargeRequestBase(BaseModel):
     battery_capacity: float
 
 class ChargeRequestCreate(ChargeRequestBase):
-    user_id: str
+    pass
 
 class ChargeRequestUpdate(BaseModel):
     mode: Optional[ChargeMode] = None

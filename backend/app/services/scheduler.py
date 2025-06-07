@@ -327,76 +327,59 @@ class ChargingScheduler:
     @staticmethod
     def finish_charging(db: Session, request_id: int) -> Tuple[bool, str]:
         """
-        完成充电，将充电中的车辆状态改为已完成
+        完成充电请求
+        一个车辆充电完成后，需要释放资源，并检查是否可以调度下一辆车
         """
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
             return False, "充电请求不存在"
-            
+
         if request.status != RequestStatus.CHARGING:
-            return False, f"充电请求状态错误: {request.status}"
-            
-        pile_id = request.pile_id
-        
-        # 修改请求状态
+            return False, "请求不在充电状态"
+
+        old_pile_id = request.pile_id
         old_status = request.status
+
+        # 更新请求状态
         request.status = RequestStatus.FINISHED
         request.end_time = datetime.now()
-        
-        # 创建队列日志
+        request.pile_id = None
+        request.queue_position = None
+
+        # 记录日志
         queue_log = QueueLog(
             request_id=request.id,
             from_status=old_status,
             to_status=RequestStatus.FINISHED,
-            pile_id=request.pile_id,
-            queue_position=request.queue_position,
-            remark="完成充电"
+            remark="充电完成"
         )
         db.add(queue_log)
-        
-        # 更新队列中其他车辆的位置
-        other_cars = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status == RequestStatus.QUEUING)
-            .filter(CarRequest.id != request_id)
-            .all()
-        )
-        
-        for car in other_cars:
-            car.queue_position -= 1
-        
-        db.commit()
-        
-        # 检查队列中第一个位置的车辆，将其状态改为充电中
-        next_car = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status == RequestStatus.QUEUING)
-            .filter(CarRequest.queue_position == 0)
-            .first()
-        )
-        
-        if next_car:
-            ChargingScheduler.start_charging(db, next_car.id)
-            
-        # 检查充电桩是否空闲
-        pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if pile:
-            charging_count = (
+
+        # --- 修复核心逻辑 ---
+        if old_pile_id:
+            # 1. 尝试启动该充电桩队列中的下一辆车
+            next_in_queue = (
                 db.query(CarRequest)
-                .filter(CarRequest.pile_id == pile_id)
-                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
-                .count()
+                .filter(CarRequest.pile_id == old_pile_id)
+                .filter(CarRequest.status == RequestStatus.QUEUING)
+                .order_by(CarRequest.queue_position)
+                .first()
             )
             
-            if charging_count == 0:
-                pile.status = PileStatus.AVAILABLE
-                db.commit()
-        
-        # 检查等候区是否有车可以调度
-        ChargingScheduler.check_and_call_waiting_cars(db)
-        
+            if next_in_queue:
+                # 如果队列有车，启动它
+                ChargingScheduler.start_charging(db, next_in_queue.id)
+            else:
+                # 如果队列没车了，将充电桩设为空闲
+                pile = db.query(ChargePile).filter(ChargePile.id == old_pile_id).first()
+                if pile:
+                    pile.status = PileStatus.AVAILABLE
+
+            # 2. 尝试从等候区调用一辆车来填补空位
+            ChargingScheduler.check_and_call_waiting_cars(db)
+        # --- 修复结束 ---
+
+        db.commit()
         return True, "成功完成充电"
     
     @staticmethod
