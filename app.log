@@ -69,3 +69,23 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-08 02:00:12,795 - backend.app.main - INFO - 应用关闭
 2025-06-08 02:00:15,141 - backend.app.main - INFO - 应用启动
 2025-06-08 02:00:15,146 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tqebk38om 已连接
+2025-06-08 02:00:18,158 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tqebk38om 已断开连接
+2025-06-08 02:00:18,910 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_arus4dfe1 已连接
+2025-06-08 02:00:30,503 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_arus4dfe1 已断开连接
+2025-06-08 02:00:30,806 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xva9zj5xz 已连接
+2025-06-08 02:00:32,232 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xva9zj5xz 已断开连接
+2025-06-08 02:00:32,556 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_m96nydixt 已连接
+2025-06-08 02:00:35,072 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_m96nydixt 已断开连接
+2025-06-08 02:00:35,382 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_urfl6qmx7 已连接
+2025-06-08 02:00:39,656 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_urfl6qmx7 已断开连接
+2025-06-08 02:00:39,959 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pe2g4nzrr 已连接
+2025-06-08 02:00:44,513 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pe2g4nzrr 已断开连接
+2025-06-08 02:00:44,839 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dedcnvftp 已连接
+2025-06-08 02:00:47,386 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dedcnvftp 已断开连接
+2025-06-08 02:00:47,707 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_55olqhcqy 已连接
+2025-06-08 02:00:55,968 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_55olqhcqy 已断开连接
+2025-06-08 02:00:56,303 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_n01er8rqm 已连接
+2025-06-08 02:00:59,887 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_n01er8rqm 已断开连接
+2025-06-08 02:01:00,215 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_978qp0xqk 已连接
+2025-06-08 02:03:33,526 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_978qp0xqk 已断开连接
+2025-06-08 02:03:33,896 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8lcblxp35 已连接

@@ -135,6 +135,14 @@
             if (isLoggedIn) {
                 setupWebSocket();
             }
+
+            // --- 修复开始：监听充电请求更新事件 ---
+            window.addEventListener('charge-request-updated', () => {
+                console.log('检测到充电请求更新，正在刷新队列信息...');
+                updateQueueInfo('FAST', 'fast-queue-container');
+                updateQueueInfo('SLOW', 'slow-queue-container');
+            });
+            // --- 修复结束 ---
         });
         
         // 更新欢迎区域

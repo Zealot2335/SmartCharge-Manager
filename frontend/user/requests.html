@@ -363,6 +363,9 @@
                 // 成功提示
                 Utils.showNotification('充电请求已提交，排队号码: ' + result.queue_number, 'success');
                 
+                // 发布一个事件，通知其他页面数据已更新
+                window.dispatchEvent(new CustomEvent('charge-request-updated'));
+                
                 // 关闭模态框
                 const modal = document.getElementById('new-request-modal');
                 modal.style.display = 'none';
