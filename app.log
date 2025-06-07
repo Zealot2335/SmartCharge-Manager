@@ -27,3 +27,11 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-07 22:42:18,764 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yy5ipwmhu 已连接
 2025-06-07 22:42:19,397 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yy5ipwmhu 已断开连接
 2025-06-07 22:42:27,262 - backend.app.main - INFO - 应用关闭
+2025-06-08 01:51:53,574 - backend.app.main - INFO - 应用启动
+2025-06-08 01:51:59,939 - backend.app.services.websocket - INFO - 用户 user 的客户端 client_1d1j7apxv 已连接
+2025-06-08 01:52:02,343 - backend.app.services.websocket - INFO - 用户 user 的客户端 client_1d1j7apxv 已断开连接
+2025-06-08 01:52:03,067 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8vxi5r0vt 已连接
+2025-06-08 01:52:05,907 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8vxi5r0vt 已断开连接
+2025-06-08 01:52:14,865 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ianow2m3o 已连接
+2025-06-08 01:53:35,425 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ianow2m3o 已断开连接
+2025-06-08 01:53:35,532 - backend.app.main - INFO - 应用关闭

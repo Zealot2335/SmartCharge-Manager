@@ -70,6 +70,7 @@ class User(UserInDB):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: UserRole
 
 class TokenData(BaseModel):
     username: Optional[str] = None
