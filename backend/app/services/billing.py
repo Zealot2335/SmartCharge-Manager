@@ -5,12 +5,12 @@ from sqlalchemy import and_, or_, func
 import uuid
 import logging
 
-from app.db.models import (
+from backend.app.db.models import (
     ChargeSession, CarRequest, ChargePile, BillMaster, BillDetail,
     RateRule, ServiceRate
 )
-from app.db.schemas import SessionStatus
-from app.core.config import get_station_config
+from backend.app.db.schemas import SessionStatus
+from backend.app.core.config import get_station_config
 
 logger = logging.getLogger(__name__)
 

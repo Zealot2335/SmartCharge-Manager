@@ -6,16 +6,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 import uvicorn
 import os
 import logging
-import sys
 from pathlib import Path
-
-# 添加项目根目录到Python路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from backend.app.api import auth, charging, billing, admin
 from backend.app.services.websocket import setup_websocket
 from backend.app.db.database import Base, engine
-from backend.app.core.config import get_settings
+from backend.app.core.config import get_system_config
 
 # 配置日志
 logging.basicConfig(
@@ -111,9 +107,9 @@ async def shutdown_event():
 # 直接运行时的入口点
 if __name__ == "__main__":
     # 获取配置
-    settings = get_settings()
-    host = settings.get("Host", "0.0.0.0")
-    port = int(settings.get("Port", 8000))
+    settings = get_system_config()
+    host = settings.get("host", "0.0.0.0")
+    port = int(settings.get("port", 8000))
     
     # 启动服务器
-    uvicorn.run("app.main:app", host=host, port=port, reload=True) 
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True)

@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-from app.db.database import get_db
-from app.db.models import User
-from app.db.schemas import TokenData, UserRole
+from backend.app.db.database import get_db
+from backend.app.db.models import User
+from backend.app.db.schemas import TokenData, UserRole
 
 # 密钥，需要保密
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"

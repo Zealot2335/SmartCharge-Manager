@@ -3,7 +3,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
-from app.db.database import Base
+from backend.app.db.database import Base
 
 # 充电桩表
 class ChargePile(Base):

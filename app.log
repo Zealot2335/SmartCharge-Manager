@@ -1,0 +1,8 @@
+2025-06-07 17:26:17,087 - backend.app.main - INFO - 应用启动
+2025-06-07 17:28:33,527 - backend.app.main - INFO - 应用关闭
+2025-06-07 17:31:11,152 - backend.app.main - INFO - 应用启动
+2025-06-07 17:34:11,723 - passlib.handlers.bcrypt - WARNING - (trapped) error reading bcrypt version
+Traceback (most recent call last):
+  File "D:\Python\Python38\lib\site-packages\passlib\handlers\bcrypt.py", line 620, in _load_backend_mixin
+    version = _bcrypt.__about__.__version__
+AttributeError: module 'bcrypt' has no attribute '__about__'

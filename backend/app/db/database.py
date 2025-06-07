@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
-from app.core.config import get_db_url
+from backend.app.core.config import get_db_url
 
 # 创建SQLAlchemy引擎
 engine = create_engine(
