@@ -6,3 +6,24 @@ Traceback (most recent call last):
   File "D:\Python\Python38\lib\site-packages\passlib\handlers\bcrypt.py", line 620, in _load_backend_mixin
     version = _bcrypt.__about__.__version__
 AttributeError: module 'bcrypt' has no attribute '__about__'
+2025-06-07 22:27:34,295 - backend.app.main - INFO - 应用启动
+2025-06-07 22:33:55,603 - backend.app.main - INFO - 应用启动
+2025-06-07 22:34:06,755 - backend.app.services.websocket - INFO - 用户 user 的客户端 client_54pzd9jqw 已连接
+2025-06-07 22:34:12,807 - backend.app.services.websocket - INFO - 用户 user 的客户端 client_54pzd9jqw 已断开连接
+2025-06-07 22:36:03,526 - backend.app.main - INFO - 应用关闭
+2025-06-07 22:36:07,987 - backend.app.main - INFO - 应用启动
+2025-06-07 22:37:57,617 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gzgnhscjg 已连接
+2025-06-07 22:38:04,105 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gzgnhscjg 已断开连接
+2025-06-07 22:38:04,497 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tgmqop9cn 已连接
+2025-06-07 22:38:21,766 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tgmqop9cn 已断开连接
+2025-06-07 22:38:29,758 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tomjkz2yy 已连接
+2025-06-07 22:38:35,210 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_tomjkz2yy 已断开连接
+2025-06-07 22:38:35,545 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_c87hhiumx 已连接
+2025-06-07 22:38:37,835 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_c87hhiumx 已断开连接
+2025-06-07 22:42:13,644 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_40ilmxoag 已连接
+2025-06-07 22:42:15,481 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_40ilmxoag 已断开连接
+2025-06-07 22:42:15,803 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pcxjhhx3x 已连接
+2025-06-07 22:42:18,437 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pcxjhhx3x 已断开连接
+2025-06-07 22:42:18,764 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yy5ipwmhu 已连接
+2025-06-07 22:42:19,397 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yy5ipwmhu 已断开连接
+2025-06-07 22:42:27,262 - backend.app.main - INFO - 应用关闭

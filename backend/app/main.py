@@ -53,42 +53,13 @@ app.include_router(charging.router, prefix="/api/charging", tags=["充电"])
 app.include_router(billing.router, prefix="/api/billing", tags=["账单"])
 app.include_router(admin.router, prefix="/api/admin", tags=["管理"])
 
-# 静态文件服务
+# 静态文件服务 (修复后)
+# 将整个 frontend 目录挂载到根路径，以便能访问到 login.html, index.html 等
 frontend_path = Path(__file__).parent.parent.parent / "frontend"
 if frontend_path.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
-
-# 根路径重定向到前端页面
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    html_path = frontend_path / "index.html"
-    if html_path.exists():
-        with open(html_path, "r", encoding="utf-8") as f:
-            return f.read()
-    else:
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>智能充电桩调度计费系统</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-                .container { max-width: 800px; margin: 0 auto; }
-                h1 { color: #333; }
-                .api-link { margin-top: 20px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>智能充电桩调度计费系统</h1>
-                <p>系统已成功启动！</p>
-                <div class="api-link">
-                    <p>API文档: <a href="/docs">/docs</a></p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+else:
+    logger.warning(f"Frontend path does not exist: {frontend_path}")
 
 # 健康检查端点
 @app.get("/health")

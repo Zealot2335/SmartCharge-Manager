@@ -14,7 +14,7 @@ from backend.app.core.auth import (
 
 router = APIRouter()
 
-@router.post("/token", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
@@ -55,7 +55,7 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = User(
         user_id=user.user_id,
         username=user.username,
-        password=get_password_hash(user.password),
+        password=user.password,  # 直接使用明文密码
         role="USER"
     )
     

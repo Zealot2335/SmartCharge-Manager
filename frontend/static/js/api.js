@@ -89,7 +89,27 @@ const auth = {
      * @returns {Promise} 登录结果
      */
     login: async (username, password) => {
-        const result = await request('/auth/login', 'POST', { username, password });
+        // --- 修复开始 ---
+        // 后端 OAuth2PasswordRequestForm 需要 application/x-www-form-urlencoded 格式
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || '登录失败');
+        }
+
+        const result = await response.json();
+        // --- 修复结束 ---
         
         // 存储token和用户信息
         if (result.access_token) {
@@ -135,7 +155,7 @@ const auth = {
      * @returns {string} 用户角色
      */
     getUserRole: () => {
-        return userRole;
+        return localStorage.getItem('user_role');
     },
     
     /**
@@ -143,7 +163,7 @@ const auth = {
      * @returns {boolean} 是否是管理员
      */
     isAdmin: () => {
-        return userRole === 'ADMIN';
+        return localStorage.getItem('user_role') === 'ADMIN';
     }
 };
 
