@@ -79,15 +79,20 @@ class ChargingScheduler:
     def get_available_piles_for_dispatch(db: Session, mode: ChargeMode) -> List[ChargePile]:
         """获取指定模式下可用于调度的充电桩 (状态为可用或繁忙，且队列未满)"""
         pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
+        logger.info(f"--- Getting available piles for {pile_type} mode ---")
         all_piles = db.query(ChargePile).filter(
             ChargePile.type == pile_type,
             ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY])
         ).all()
+        logger.info(f"Found {len(all_piles)} piles with status AVAILABLE or BUSY.")
 
         available_piles = []
         for pile in all_piles:
-            if ChargingScheduler.check_pile_queue_available(db, pile.id):
+            is_available = ChargingScheduler.check_pile_queue_available(db, pile.id)
+            if is_available:
                 available_piles.append(pile)
+        
+        logger.info(f"--- Finished getting available piles. Found {len(available_piles)} piles with queue space. ---")
         return available_piles
 
     @staticmethod
@@ -102,11 +107,11 @@ class ChargingScheduler:
     
     @staticmethod
     def get_pile_queue_length(db: Session, pile_id: int) -> int:
-        """获取指定充电桩的当前队列长度（包括正在充电和排队的）"""
+        """获取指定充电桩的当前队列长度（只计算正在排队的）"""
         return (
             db.query(CarRequest)
             .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+            .filter(CarRequest.status == RequestStatus.QUEUING) # 只计算排队中的车辆
             .count()
         )
     
@@ -116,8 +121,27 @@ class ChargingScheduler:
         config = get_station_config()
         queue_len = config.get("ChargingQueueLen", 2)
         
+        pile = db.query(ChargePile).get(pile_id)
         current_queue_length = ChargingScheduler.get_pile_queue_length(db, pile_id)
-        return current_queue_length < queue_len
+        
+        # 正在充电的车辆数
+        charging_count = db.query(CarRequest).filter(
+            CarRequest.pile_id == pile_id, 
+            CarRequest.status == RequestStatus.CHARGING
+        ).count()
+
+        # 总占用 = 正在充电 + 正在排队
+        total_occupied = charging_count + current_queue_length
+        is_available = total_occupied < queue_len
+
+        logger.info(f"Checking pile {pile.code if pile else 'N/A'} (ID: {pile_id}): "
+                    f"Charging={charging_count}, "
+                    f"Queuing={current_queue_length}, "
+                    f"TotalOccupied={total_occupied}, "
+                    f"QueueCapacity={queue_len}, "
+                    f"HasSpace={is_available}")
+
+        return is_available
     
     @staticmethod
     def get_pile_queue_waiting_time(db: Session, pile_id: int) -> float:
@@ -227,30 +251,35 @@ class ChargingScheduler:
         """
         从等候区呼叫下一辆车（如果任何匹配的桩有空位）
         """
-        # 检查是否有桩可以接收新车
+        # 1. 检查是否有桩可以接收新车
+        logger.info(f"[{mode.value}] Step 1: Getting available piles for dispatch.")
         available_piles = ChargingScheduler.get_available_piles_for_dispatch(db, mode)
         if not available_piles:
-            logger.debug(f"No available piles for dispatch in {mode.value} mode. Skipping call.")
+            logger.info(f"[{mode.value}] Step 1 Result: No available piles found. Skipping call.")
             return
+        logger.info(f"[{mode.value}] Step 1 Result: Found {len(available_piles)} available pile(s): {[p.code for p in available_piles]}")
 
-        # 获取等候区下一辆车 (按排队号FIFO)
+
+        # 2. 获取等候区下一辆车 (按排队号FIFO)
+        logger.info(f"[{mode.value}] Step 2: Getting next car from waiting area.")
         next_car = db.query(CarRequest).filter(
             CarRequest.mode == mode,
             CarRequest.status == RequestStatus.WAITING
         ).order_by(CarRequest.queue_number).first()
         
         if not next_car:
-            logger.debug(f"No waiting cars found for {mode.value} mode.")
+            logger.info(f"[{mode.value}] Step 2 Result: No waiting cars found.")
             return
+        logger.info(f"[{mode.value}] Step 2 Result: Found waiting car with request ID {next_car.id} and queue number {next_car.queue_number}.")
             
-        logger.info(f"Calling waiting car: request {next_car.id} ({next_car.queue_number}). Selecting optimal pile.")
+        logger.info(f"[{mode.value}] Step 3: Selecting optimal pile for request {next_car.id}.")
         best_pile = ChargingScheduler.select_optimal_pile(db, next_car)
         
         if best_pile:
-            logger.info(f"Optimal pile for request {next_car.id} is {best_pile.code}. Assigning to pile.")
+            logger.info(f"[{mode.value}] Step 3 Result: Optimal pile is {best_pile.code}. Assigning to pile.")
             ChargingScheduler.assign_to_pile(db, next_car, best_pile)
         else:
-            logger.warning(f"No optimal pile found for request {next_car.id}, though some piles were available. This may indicate a logic issue.")
+            logger.warning(f"[{mode.value}] Step 3 Result: No optimal pile found for request {next_car.id}.")
 
     @staticmethod
     def check_and_call_waiting_cars(db: Session):

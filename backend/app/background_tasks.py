@@ -24,7 +24,12 @@ def periodic_charge_check():
     logger.info("--- Background Task: Running periodic check for completed charges ---")
     try:
         with get_db_session() as db:
+            # 1. 检查并结束已完成的充电 (防止卡死)
             ChargingScheduler.check_and_finish_completed_charges(db)
+            
+            # 2. 检查并呼叫等候区的车辆 (核心调度)
+            ChargingScheduler.check_and_call_waiting_cars(db)
+
         logger.info("--- Background Task: Periodic check finished successfully ---")
     except Exception as e:
         logger.error(f"--- Background Task: Error during periodic check: {e} ---", exc_info=True) 

@@ -260,7 +260,7 @@
                 loadPileStatus();
                 loadQueueStatus();
             }, 5000); // 每5秒刷新一次
-
+            
             // 连接WebSocket
             setupWebSocket();
         });
@@ -405,7 +405,7 @@
                 </div>
             `;
         }
-
+        
         // 启用充电桩
         async function handlePowerOn(pileCode) {
             try {
@@ -415,7 +415,7 @@
                 loadQueueStatus();
             } catch (error) {
                 Utils.showNotification(`启用失败: ${error.message}`, 'error');
-            }
+                    }
         }
 
         // 禁用充电桩
@@ -425,7 +425,7 @@
                 Utils.showNotification(`充电桩 ${pileCode} 已禁用`, 'success');
                 loadPileStatus(); // 重新加载状态
                 loadQueueStatus();
-            } catch (error) {
+                    } catch (error) {
                 Utils.showNotification(`禁用失败: ${error.message}`, 'error');
             }
         }

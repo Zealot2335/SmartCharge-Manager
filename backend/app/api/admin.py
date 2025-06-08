@@ -251,6 +251,34 @@ async def shutdown_pile(
     
     return {"code": code, "status": pile.status, "message": f"充电桩 {code} 已关闭"}
 
+@router.get("/requests", response_model=List[Dict[str, Any]])
+async def get_recent_requests(
+    limit: int = Query(10, description="返回的请求数量"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """获取最近的充电请求"""
+    requests = (
+        db.query(CarRequest)
+        .order_by(CarRequest.request_time.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    result = []
+    for req in requests:
+        result.append({
+            "id": req.id,
+            "queue_number": req.queue_number,
+            "user_id": req.user_id,
+            "mode": req.mode,
+            "amount_kwh": req.amount_kwh,
+            "status": req.status,
+            "pile_code": req.pile.code if req.pile else None,
+            "request_time": req.request_time,
+        })
+    return result
+
 @router.post("/pile/{code}/fault", response_model=Dict[str, Any])
 async def report_pile_fault(
     code: str,
@@ -420,9 +448,9 @@ async def update_service_rate(
     
     return new_rate
 
-@router.get("/reports/daily", response_model=Dict[str, Any])
+@router.get("/reports/daily/{report_date}", response_model=Dict[str, Any])
 async def get_daily_report(
-    report_date: date = Query(..., description="报表日期"),
+    report_date: date,
     export_csv: bool = Query(False, description="是否导出为CSV格式"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
