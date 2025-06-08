@@ -14,10 +14,47 @@ from backend.app.core.auth import get_current_user
 from backend.app.services.scheduler import ChargingScheduler
 from backend.app.services.billing import BillingService
 from backend.app.services.charging_service import ChargingService
+from backend.app.core.config import get_station_config
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+@router.get("/waiting_area", response_model=Dict[str, Any])
+async def get_waiting_area_status(db: Session = Depends(get_db)):
+    """获取等候区状态"""
+    logger.info("--- Enter get_waiting_area_status ---")
+    try:
+        logger.info("Step 1: Getting station config.")
+        config = get_station_config()
+        capacity = config.get("WaitingAreaSize", 6)
+        logger.info(f"Step 1 successful. Capacity is {capacity}.")
+
+        logger.info("Step 2: Counting fast waiting cars.")
+        fast_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.FAST)
+        logger.info(f"Step 2 successful. Fast waiting cars: {fast_waiting}.")
+
+        logger.info("Step 3: Counting slow waiting cars.")
+        slow_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.SLOW)
+        logger.info(f"Step 3 successful. Slow waiting cars: {slow_waiting}.")
+        
+        total_waiting = fast_waiting + slow_waiting
+        
+        response_data = {
+            "waiting_count": total_waiting,
+            "capacity": capacity,
+            "fast_queue": fast_waiting,
+            "slow_queue": slow_waiting
+        }
+        logger.info(f"--- Exiting get_waiting_area_status with data: {response_data} ---")
+        return response_data
+    except Exception as e:
+        logger.error(f"!!!!!! EXCEPTION in get_waiting_area_status: {e}", exc_info=True)
+        # 重新抛出HTTP异常，以便FastAPI可以处理它
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 @router.post("/request", response_model=ChargeRequest)
 async def create_charge_request(

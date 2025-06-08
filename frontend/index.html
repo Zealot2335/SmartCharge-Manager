@@ -93,6 +93,35 @@
                     </div>
                 </form>
             </div>
+
+            <div class="row">
+                <div class="col-12">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            等候区状态
+                        </div>
+                        <div class="card-body text-center">
+                            <p class="card-text mb-2">
+                                <strong>当前等候车辆:</strong> 
+                                <span id="waiting-count" class="badge bg-primary fs-5">--</span> / 
+                                <span id="waiting-capacity" class="badge bg-secondary fs-5">--</span>
+                            </p>
+                            <div class="d-flex justify-content-center">
+                                <span class="mx-3">快速充电等候: <strong id="fast-waiting-count" class="text-danger">--</strong> 辆</span>
+                                <span class="mx-3">慢速充电等候: <strong id="slow-waiting-count" class="text-info">--</strong> 辆</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <!-- ... existing code ... -->
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -140,11 +169,17 @@
 
             // --- 修复开始：监听充电请求更新事件 ---
             window.addEventListener('charge-request-updated', () => {
-                console.log('检测到充电请求更新，正在刷新队列信息...');
-                updateQueueInfo('FAST', 'fast-queue-container');
-                updateQueueInfo('SLOW', 'slow-queue-container');
+                console.log('检测到充电请求更新，正在刷新队列和等候区信息...');
+                if (!API.auth.isAdmin()) {
+                    loadQueueInfo('FAST');
+                    loadQueueInfo('SLOW');
+                }
+                updateWaitingAreaStatus(); // 更新等候区
             });
             // --- 修复结束 ---
+
+            // 初始化加载等候区状态
+            updateWaitingAreaStatus();
         });
         
         // 更新欢迎区域
@@ -351,7 +386,11 @@
             // 监听队列更新
             wsClient.on('queue_update', (data) => {
                 // 刷新队列信息
-                loadQueueInfo(data.mode);
+                console.log(`收到 ${data.mode} 队列更新...`);
+                if (!API.auth.isAdmin()) {
+                    loadQueueInfo(data.mode);
+                }
+                updateWaitingAreaStatus(); // 更新等候区
             });
             
             // 监听充电桩状态变化
@@ -360,6 +399,39 @@
                 loadChargingStatus();
             });
         }
+
+        const updateAllStatus = () => {
+            updatePileStatus();
+            getQueueInfo('FAST');
+            getQueueInfo('SLOW');
+            updateWaitingAreaStatus(); // 新增调用
+        };
+
+        const updateWaitingAreaStatus = async () => {
+            try {
+                const data = await API.charging.getWaitingAreaStatus();
+                if (data) {
+                    document.getElementById('waiting-count').textContent = data.waiting_count;
+                    document.getElementById('waiting-capacity').textContent = data.capacity;
+                    document.getElementById('fast-waiting-count').textContent = data.fast_queue;
+                    document.getElementById('slow-waiting-count').textContent = data.slow_queue;
+                }
+            } catch (error) {
+                console.error('获取等候区状态失败:', error);
+                // 可以在UI上显示错误提示
+                document.getElementById('waiting-count').textContent = '错误';
+                document.getElementById('fast-waiting-count').textContent = 'N/A';
+                document.getElementById('slow-waiting-count').textContent = 'N/A';
+            }
+        };
+
+        const updatePileStatus = async () => {
+            try {
+                // ... existing code ...
+            } catch (error) {
+                console.error('更新充电桩状态失败:', error);
+            }
+        };
     </script>
 </body>
 </html> 

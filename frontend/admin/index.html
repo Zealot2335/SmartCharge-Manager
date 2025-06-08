@@ -125,6 +125,100 @@
                     </div>
                 </div>
             </div>
+
+            <h2 class="mb-4">管理员控制台</h2>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    等候区状态
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        <strong>当前等候车辆:</strong> 
+                        <span id="waiting-count" class="badge bg-primary fs-6">--</span> / 
+                        <span id="waiting-capacity" class="badge bg-secondary fs-6">--</span>
+                    </p>
+                    <div class="d-flex justify-content-around">
+                        <span>快速充电等候: <strong id="fast-waiting-count" class="text-danger">--</strong> 辆</span>
+                        <span>|</span>
+                        <span>慢速充电等候: <strong id="slow-waiting-count" class="text-info">--</strong> 辆</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <h2 class="card-title">充电桩状态</h2>
+                        <div id="pile-status-container">
+                            <p>正在加载充电桩状态...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card">
+                        <h2 class="card-title">队列状态</h2>
+                        <div id="queue-status-container">
+                            <p>正在加载队列状态...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">最近充电请求</h2>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>排队号</th>
+                                <th>用户ID</th>
+                                <th>充电模式</th>
+                                <th>请求量</th>
+                                <th>状态</th>
+                                <th>充电桩</th>
+                                <th>请求时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-requests-table-body">
+                            <tr>
+                                <td colspan="8" class="text-center">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="text-align: right; margin-top: 10px;">
+                    <a href="/admin/requests.html" class="btn btn-secondary">查看所有请求</a>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">系统操作</h2>
+                <div class="grid">
+                    <div class="col-4">
+                        <div class="action-card">
+                            <h3>充电桩管理</h3>
+                            <p>管理充电桩状态、查看详情</p>
+                            <a href="/admin/piles.html" class="btn">进入</a>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="action-card">
+                            <h3>费率管理</h3>
+                            <p>设置电价费率和服务费率</p>
+                            <a href="/admin/rates.html" class="btn">进入</a>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="action-card">
+                            <h3>报表统计</h3>
+                            <p>查看充电统计和收入报表</p>
+                            <a href="/admin/reports.html" class="btn">进入</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -495,6 +589,37 @@
                 loadRecentRequests();
             });
         }
+
+        const updateAllData = () => {
+            updatePileStatus();
+            updateQueueStatus('FAST');
+            updateQueueStatus('SLOW');
+            updateRecentRequests();
+            updateDailyReport();
+            updateWaitingAreaStatus(); // 新增调用
+        };
+
+        const updateWaitingAreaStatus = async () => {
+            try {
+                const data = await api.getWaitingAreaStatus();
+                if (data) {
+                    $('#waiting-count').text(data.waiting_count);
+                    $('#waiting-capacity').text(data.capacity);
+                    $('#fast-waiting-count').text(data.fast_queue);
+                    $('#slow-waiting-count').text(data.slow_queue);
+                }
+            } catch (error) {
+                console.error('获取等候区状态失败:', error);
+            }
+        };
+
+        const updatePileStatus = async () => {
+            try {
+                // ... existing code ...
+            } catch (error) {
+                console.error('更新充电桩状态失败:', error);
+            }
+        };
     </script>
     
     <style>

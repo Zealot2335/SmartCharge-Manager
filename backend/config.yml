@@ -12,7 +12,7 @@ database:
   port: 3306
   user: root
   password: 20031216cyh
-  database: smart_charge
+  database: smart_charge_test_2024
   charset: utf8mb4
 
 # 充电站参数

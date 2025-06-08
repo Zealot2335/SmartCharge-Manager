@@ -237,6 +237,14 @@ const charging = {
     },
     
     /**
+     * 获取等候区状态
+     * @returns {Promise<any>}
+     */
+    getWaitingAreaStatus: async () => {
+        return await request('/charging/waiting_area');
+    },
+    
+    /**
      * 模拟充电进度（仅测试用）
      * @param {number} requestId - 请求ID
      * @param {number} progress - 进度百分比
@@ -399,7 +407,7 @@ const admin = {
      */
     resolveFault: (faultId) => {
         return request(`/admin/faults/${faultId}/resolve`, 'POST');
-    }
+    },
 };
 
 /**

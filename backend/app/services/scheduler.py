@@ -28,20 +28,22 @@ class ChargingScheduler:
         last_request = (
             db.query(CarRequest)
             .filter(CarRequest.mode == mode)
-            .filter(CarRequest.queue_number.like(f"{prefix}%"))
-            .order_by(CarRequest.queue_number.desc())
+            .order_by(CarRequest.id.desc())
             .first()
         )
         
         # 计算新序号
-        if last_request:
+        if last_request and last_request.queue_number.startswith(prefix):
             try:
                 last_number = int(last_request.queue_number[1:])
                 new_number = last_number + 1
-            except ValueError:
-                new_number = 1
+            except (ValueError, IndexError):
+                # 如果最新的号码格式不正确，则重新从1开始
+                count = db.query(CarRequest).filter(CarRequest.mode == mode).count()
+                new_number = count + 1
         else:
-            new_number = 1
+            count = db.query(CarRequest).filter(CarRequest.mode == mode).count()
+            new_number = count + 1
             
         return f"{prefix}{new_number}"
     
@@ -74,16 +76,20 @@ class ChargingScheduler:
         )
     
     @staticmethod
-    def get_available_piles(db: Session, mode: ChargeMode) -> List[ChargePile]:
-        """获取指定模式下可用于调度的充电桩"""
+    def get_available_piles_for_dispatch(db: Session, mode: ChargeMode) -> List[ChargePile]:
+        """获取指定模式下可用于调度的充电桩 (状态为可用或繁忙，且队列未满)"""
         pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
-        return (
-            db.query(ChargePile)
-            .filter(ChargePile.type == pile_type)
-            .filter(ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY]))
-            .all()
-        )
-    
+        all_piles = db.query(ChargePile).filter(
+            ChargePile.type == pile_type,
+            ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY])
+        ).all()
+
+        available_piles = []
+        for pile in all_piles:
+            if ChargingScheduler.check_pile_queue_available(db, pile.id):
+                available_piles.append(pile)
+        return available_piles
+
     @staticmethod
     def count_waiting_cars(db: Session, mode: ChargeMode) -> int:
         """获取指定模式下等候区等待的车辆数量"""
@@ -114,41 +120,30 @@ class ChargingScheduler:
         return current_queue_length < queue_len
     
     @staticmethod
-    def get_pile_queue_waiting_time(db: Session, pile_id: int, before_position: Optional[int] = None) -> float:
+    def get_pile_queue_waiting_time(db: Session, pile_id: int) -> float:
         """
-        计算指定充电桩队列在某个位置之前的预计等待时间(分钟)
-        :param pile_id: 充电桩ID
-        :param before_position: 计算截止到的队列位置(不包含此位置), 如果为None则计算整个队列
+        计算指定充电桩队列的总预计等待时间(分钟)
         """
         pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
         if not pile or pile.power == 0:
-            return 0.0
+            return float('inf')
 
         power = pile.power
         
-        # 查询此位置前排队中的请求
-        query = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING]))
-        )
+        queuing_requests = db.query(CarRequest).filter(
+            CarRequest.pile_id == pile_id,
+            CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING])
+        ).order_by(CarRequest.queue_position).all()
         
-        if before_position is not None:
-            query = query.filter(CarRequest.queue_position < before_position)
-            
-        queuing_requests = query.order_by(CarRequest.queue_position).all()
-        
-        # 计算总等待时间(分钟)
         total_waiting_time = 0.0
         for request in queuing_requests:
             if request.status == RequestStatus.CHARGING and request.start_time:
                 # 正在充电的车辆，计算剩余充电时间
-                already_charged_duration = (datetime.now() - request.start_time).total_seconds() / 3600 # hours
-                already_charged_kwh = already_charged_duration * power
-                remaining_kwh = request.amount_kwh - already_charged_kwh
-                if remaining_kwh > 0:
-                    remaining_time_hours = remaining_kwh / power
-                    total_waiting_time += remaining_time_hours * 60
+                duration_hours = (datetime.now() - request.start_time).total_seconds() / 3600
+                charged_kwh = duration_hours * power
+                remaining_kwh = max(0, request.amount_kwh - charged_kwh)
+                remaining_time_hours = remaining_kwh / power
+                total_waiting_time += remaining_time_hours * 60
             else:
                 # 排队中的车辆，计算完整充电时间
                 charging_time_hours = request.amount_kwh / power
@@ -157,187 +152,114 @@ class ChargingScheduler:
         return total_waiting_time
     
     @staticmethod
-    def calculate_finish_time(db: Session, pile_id: int, amount_kwh: float) -> float:
+    def calculate_total_finish_time(db: Session, pile_id: int, amount_kwh: float) -> float:
         """
-        计算完成充电所需时长(分钟)
-        等待时间 + 自身充电时间
+        计算车辆在该桩的预计总完成时长(分钟) = 等待时间 + 自身充电时间
         """
         pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if not pile:
+        if not pile or pile.power <= 0:
             return float('inf')
             
-        # 等待时间
         waiting_time = ChargingScheduler.get_pile_queue_waiting_time(db, pile_id)
-        
-        # 自身充电时间(小时) = 请求充电量 / 充电功率
-        self_charging_time_hours = amount_kwh / pile.power
-        # 转换为分钟
-        self_charging_time_minutes = self_charging_time_hours * 60
+        self_charging_time_minutes = (amount_kwh / pile.power) * 60
         
         return waiting_time + self_charging_time_minutes
     
     @staticmethod
-    def select_optimal_pile(db: Session, request_id: int) -> Optional[int]:
+    def select_optimal_pile(db: Session, request: CarRequest) -> Optional[ChargePile]:
         """
-        根据调度策略选择最优的充电桩
+        根据调度策略为指定请求选择最优的充电桩
         策略：完成充电所需时长（等待时间+自己充电时间）最短
         """
-        request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
-        if not request:
-            return None
-            
-        # 获取可用的充电桩
-        available_piles = ChargingScheduler.get_available_piles(db, request.mode)
+        available_piles = ChargingScheduler.get_available_piles_for_dispatch(db, request.mode)
         if not available_piles:
             return None
             
-        best_pile_id = None
+        best_pile = None
         min_finish_time = float('inf')
         
-        # 选择完成时间最短的充电桩
         for pile in available_piles:
-            # 检查队列是否有空位
-            if not ChargingScheduler.check_pile_queue_available(db, pile.id):
-                continue
-                
-            finish_time = ChargingScheduler.calculate_finish_time(db, pile.id, request.amount_kwh)
+            finish_time = ChargingScheduler.calculate_total_finish_time(db, pile.id, request.amount_kwh)
             if finish_time < min_finish_time:
                 min_finish_time = finish_time
-                best_pile_id = pile.id
+                best_pile = pile
                 
-        return best_pile_id
+        return best_pile
     
     @staticmethod
-    def assign_to_pile(db: Session, request_id: int, pile_id: int) -> Tuple[bool, str]:
+    def assign_to_pile(db: Session, request: CarRequest, pile: ChargePile):
         """
         将请求分配到充电桩队列
         """
-        logger.debug(f"Attempting to assign request {request_id} to pile {pile_id}")
-        request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
-        if not request:
-            logger.error(f"Assign failed: Request {request_id} not found.")
-            return False, "充电请求不存在"
-        
-        pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if not pile:
-            logger.error(f"Assign failed: Pile {pile_id} not found.")
-            return False, "充电桩不存在"
-        
-        # 检查充电桩类型是否匹配
-        if (request.mode == ChargeMode.FAST and pile.type != "FAST") or \
-           (request.mode == ChargeMode.SLOW and pile.type != "SLOW"):
-            return False, "充电桩类型与请求不匹配"
-        
-        # 检查充电桩队列是否有空位
-        if not ChargingScheduler.check_pile_queue_available(db, pile_id):
-            return False, "充电桩队列已满"
-        
-        # 获取队列位置
-        queue_position = ChargingScheduler.get_pile_queue_length(db, pile_id)
-        
-        # 修改请求状态
-        old_status = request.status
-        request.status = RequestStatus.QUEUING
-        request.pile_id = pile_id
-        request.queue_position = queue_position
-        
-        # 创建队列日志
-        queue_log = QueueLog(
-            request_id=request.id,
-            from_status=old_status,
-            to_status=RequestStatus.QUEUING,
-            pile_id=pile_id,
-            queue_position=queue_position,
-            remark=f"分配到充电桩 {pile.code}, 队列位置 {queue_position}"
-        )
-        db.add(queue_log)
-        
-        # --- 这里是核心修改 ---
-        should_start_charging = (queue_position == 0 and pile.status == PileStatus.AVAILABLE)
-        
-        # 更新充电桩状态
-        if pile.status == PileStatus.AVAILABLE:
-            pile.status = PileStatus.BUSY
-        
-        # 提交分配的事务
-        db.commit()
+        try:
+            queue_position = ChargingScheduler.get_pile_queue_length(db, pile.id)
+            
+            old_status = request.status
+            request.status = RequestStatus.QUEUING
+            request.pile_id = pile.id
+            request.queue_position = queue_position
+            
+            queue_log = QueueLog(
+                request_id=request.id,
+                from_status=old_status,
+                to_status=RequestStatus.QUEUING,
+                pile_id=pile.id,
+                queue_position=queue_position,
+                remark=f"分配到充电桩 {pile.code}, 队列位置 {queue_position}"
+            )
+            db.add(queue_log)
+            
+            if pile.status == PileStatus.AVAILABLE:
+                pile.status = PileStatus.BUSY
+            
+            db.commit()
 
-        # 如果需要，独立启动充电流程
-        if should_start_charging:
-            logger.info(f"Request {request.id} is at the front of the queue for an available pile. Starting charging immediately.")
-            # 直接调用 start_charging，它会处理状态变更和日志记录
-            success, msg = ChargingScheduler.start_charging(db, request.id)
-            if not success:
-                logger.error(f"Failed to start charging for request {request.id}: {msg}")
-                # 启动失败，需要考虑回滚或错误处理
-        # --- 修改结束 ---
-        
-        logger.info(f"Successfully assigned request {request_id} to pile {pile.code} (ID: {pile_id}) at position {queue_position}")
-        return True, f"成功分配到充电桩 {pile.code}, 队列位置 {queue_position}"
-    
+            logger.info(f"Successfully assigned request {request.id} to pile {pile.code} at position {queue_position}")
+            
+            if queue_position == 0:
+                ChargingScheduler.start_charging(db, request.id)
+        except Exception as e:
+            logger.error(f"Error assigning request {request.id} to pile {pile.id}: {e}", exc_info=True)
+            db.rollback()
+
     @staticmethod
-    def call_next_waiting_car(db: Session, mode: ChargeMode) -> Optional[int]:
+    def call_next_waiting_car(db: Session, mode: ChargeMode):
         """
-        调用等候区下一辆车进入充电区
-        返回被调度的请求ID，如果没有可调度的车辆则返回None
+        从等候区呼叫下一辆车（如果任何匹配的桩有空位）
         """
-        logger.debug(f"Calling next waiting car for {mode.value} mode.")
-        # 获取指定模式下，按照排队号码排序的第一辆等待中的车
-        next_car = (
-            db.query(CarRequest)
-            .filter(CarRequest.mode == mode)
-            .filter(CarRequest.status == RequestStatus.WAITING)
-            .order_by(CarRequest.queue_number)
-            .first()
-        )
+        # 检查是否有桩可以接收新车
+        available_piles = ChargingScheduler.get_available_piles_for_dispatch(db, mode)
+        if not available_piles:
+            logger.debug(f"No available piles for dispatch in {mode.value} mode. Skipping call.")
+            return
+
+        # 获取等候区下一辆车 (按排队号FIFO)
+        next_car = db.query(CarRequest).filter(
+            CarRequest.mode == mode,
+            CarRequest.status == RequestStatus.WAITING
+        ).order_by(CarRequest.queue_number).first()
         
         if not next_car:
             logger.debug(f"No waiting cars found for {mode.value} mode.")
-            return None
+            return
             
-        # 选择最优的充电桩
-        logger.debug(f"Found waiting car: request {next_car.id}. Selecting optimal pile.")
-        best_pile_id = ChargingScheduler.select_optimal_pile(db, next_car.id)
-        if not best_pile_id:
-            logger.debug(f"No optimal pile found for request {next_car.id}.")
-            return None
-            
-        # 分配到充电桩
-        logger.info(f"Optimal pile for request {next_car.id} is {best_pile_id}. Assigning to pile.")
-        success, _ = ChargingScheduler.assign_to_pile(db, next_car.id, best_pile_id)
-        if success:
-            logger.info(f"Successfully assigned request {next_car.id} to pile {best_pile_id}.")
-            return next_car.id
+        logger.info(f"Calling waiting car: request {next_car.id} ({next_car.queue_number}). Selecting optimal pile.")
+        best_pile = ChargingScheduler.select_optimal_pile(db, next_car)
+        
+        if best_pile:
+            logger.info(f"Optimal pile for request {next_car.id} is {best_pile.code}. Assigning to pile.")
+            ChargingScheduler.assign_to_pile(db, next_car, best_pile)
         else:
-            logger.error(f"Failed to assign request {next_car.id} to pile {best_pile_id}.")
-            return None
-    
+            logger.warning(f"No optimal pile found for request {next_car.id}, though some piles were available. This may indicate a logic issue.")
+
     @staticmethod
-    def check_and_call_waiting_cars(db: Session) -> List[int]:
+    def check_and_call_waiting_cars(db: Session):
         """
-        检查并呼叫等候区的车辆
-        这是调度的主要入口点
+        检查并呼叫等候区的车辆 (主调度入口)
         """
         logger.info("--- Main Scheduler: Checking and calling waiting cars ---")
-
-        # 核心保障：先检查并结束已完成的充电，释放资源
-        ChargingScheduler.check_and_finish_completed_charges(db)
-
-        # 获取所有可用充电桩 (快充和慢充)
-        fast_piles = ChargingScheduler.get_available_piles(db, ChargeMode.FAST)
-        slow_piles = ChargingScheduler.get_available_piles(db, ChargeMode.SLOW)
-
-        scheduled_cars = []
         for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
-            while True:
-                car_id = ChargingScheduler.call_next_waiting_car(db, mode)
-                if car_id:
-                    scheduled_cars.append(car_id)
-                    logger.info(f"Scheduled car request {car_id} for {mode.value} charging.")
-                else:
-                    # No more cars can be scheduled for this mode
-                    break
-        return scheduled_cars
+            ChargingScheduler.call_next_waiting_car(db, mode)
     
     @staticmethod
     def start_charging(db: Session, request_id: int) -> Tuple[bool, str]:
@@ -347,30 +269,28 @@ class ChargingScheduler:
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
             return False, "充电请求不存在"
-            
+        
         if request.status != RequestStatus.QUEUING:
             return False, f"充电请求状态错误: {request.status}"
-            
+        
         if request.queue_position != 0:
             return False, f"队列位置错误，不是第一个位置: {request.queue_position}"
-            
-        # 修改请求状态
+        
         old_status = request.status
         request.status = RequestStatus.CHARGING
         request.start_time = datetime.now()
         
-        # 创建队列日志
+        # 创建充电会话
+        BillingService.create_charge_session(db, request.id, request.pile_id)
+
         queue_log = QueueLog(
-            request_id=request.id,
-            from_status=old_status,
-            to_status=RequestStatus.CHARGING,
-            pile_id=request.pile_id,
-            queue_position=request.queue_position,
-            remark="开始充电"
+            request_id=request.id, from_status=old_status, to_status=RequestStatus.CHARGING,
+            pile_id=request.pile_id, queue_position=request.queue_position, remark="开始充电"
         )
         db.add(queue_log)
         db.commit()
         
+        logger.info(f"Request {request.id} has started charging on pile {request.pile_id}.")
         return True, "成功开始充电"
     
     @staticmethod
@@ -379,70 +299,65 @@ class ChargingScheduler:
         完成充电, 并处理后续调度
         """
         logger.info(f"--- Attempting to finish charging for request_id: {request_id} ---")
-        request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
-        if not request:
-            logger.error(f"Finish charging failed: Request {request_id} not found.")
-            return False, "充电请求不存在"
+        with db.begin_nested():
+            request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
+            if not request:
+                logger.error(f"Finish charging failed: Request {request_id} not found.")
+                return False, "充电请求不存在"
 
-        if request.status != RequestStatus.CHARGING:
-            logger.warning(f"Finish charging called on a non-charging request. Status: {request.status}")
-            return False, f"充电请求状态为 {request.status}，无法完成充电"
+            if request.status != RequestStatus.CHARGING:
+                logger.warning(f"Finish charging called on a non-charging request. Status: {request.status}")
+                return False, f"充电请求状态为 {request.status}，无法完成充电"
 
-        pile_id = request.pile_id
-        if not pile_id:
-            logger.error(f"FATAL: Request {request_id} is CHARGING but has no pile_id.")
+            pile_id = request.pile_id
+            if not pile_id:
+                logger.error(f"FATAL: Request {request_id} is CHARGING but has no pile_id.")
+                request.status = RequestStatus.FINISHED
+                db.commit()
+                return False, "请求状态不一致"
+
+            pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
+            if not pile:
+                logger.error(f"Finish charging failed: Pile {pile_id} not found for request {request_id}.")
+                return False, "充电桩不存在"
+
+            # 1. 结算账单
+            active_session = db.query(ChargeSession).filter(ChargeSession.request_id == request_id, ChargeSession.status == "CHARGING").first()
+            if active_session:
+                BillingService.complete_charge_session(db, active_session.id)
+            else:
+                logger.warning(f"Could not find an active charging session for request {request_id} to finalize billing.")
+
+            # 2. 记录日志并释放已完成的请求
+            queue_log = QueueLog(
+                request_id=request.id, from_status=RequestStatus.CHARGING, to_status=RequestStatus.FINISHED,
+                pile_id=pile.id, queue_position=request.queue_position, remark=f"充电完成，从充电桩 {pile.code} 释放"
+            )
+            db.add(queue_log)
+            
             request.status = RequestStatus.FINISHED
-            db.commit()
-            return False, "请求状态不一致"
-
-        pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if not pile:
-            logger.error(f"Finish charging failed: Pile {pile_id} not found for request {request_id}.")
-            return False, "充电桩不存在"
-
-        # 1. 结算账单
-        active_session = db.query(ChargeSession).filter(ChargeSession.request_id == request_id, ChargeSession.status == "CHARGING").first()
-        if active_session:
-            session = BillingService.complete_charge_session(db, active_session.id)
-            if not session:
-                logger.error(f"Billing session for request {request_id} (session {active_session.id}) could not be finalized.")
-        else:
-            logger.warning(f"Could not find an active charging session for request {request_id} to finalize billing.")
-
-        # 2. 记录日志并释放已完成的请求
-        queue_log = QueueLog(
-            request_id=request.id,
-            from_status=RequestStatus.CHARGING,
-            to_status=RequestStatus.FINISHED,
-            pile_id=pile.id,
-            queue_position=request.queue_position,
-            remark=f"充电完成，从充电桩 {pile.code} 释放"
-        )
-        db.add(queue_log)
+            request.end_time = datetime.now()
+            request.pile_id = None
+            request.queue_position = None
         
-        request.status = RequestStatus.FINISHED
-        request.end_time = datetime.now()
-        request.pile_id = None
-        request.queue_position = None
-        db.commit()
         logger.info(f"Request {request_id} has finished and is released. Now managing the queue for pile {pile.code}.")
 
         # 3. "队内晋升": 处理桩内剩余的排队车辆
-        remaining_cars = db.query(CarRequest).filter(CarRequest.pile_id == pile.id).order_by(CarRequest.queue_position).all()
+        remaining_cars = db.query(CarRequest).filter(CarRequest.pile_id == pile_id).order_by(CarRequest.queue_position).all()
         if remaining_cars:
             logger.info(f"Found {len(remaining_cars)} car(s) remaining in pile {pile.code}'s queue. Updating positions.")
-            for car in remaining_cars:
-                if car.queue_position > 0:
-                    car.queue_position -= 1
-            db.commit()
-
-            next_car_to_charge = db.query(CarRequest).filter(CarRequest.pile_id == pile.id, CarRequest.queue_position == 0).first()
+            with db.begin_nested():
+                for car in remaining_cars:
+                    if car.queue_position is not None and car.queue_position > 0:
+                        car.queue_position -= 1
+            
+            next_car_to_charge = next((car for car in remaining_cars if car.queue_position == 0), None)
             if next_car_to_charge and next_car_to_charge.status == RequestStatus.QUEUING:
                 logger.info(f"Promoting request {next_car_to_charge.id} to start charging on pile {pile.code}.")
                 ChargingScheduler.start_charging(db, next_car_to_charge.id)
 
         # 4. 更新充电桩状态
-        final_car_count = db.query(CarRequest).filter(CarRequest.pile_id == pile.id).count()
+        final_car_count = db.query(CarRequest).filter(CarRequest.pile_id == pile_id).count()
         if final_car_count == 0:
             pile.status = PileStatus.AVAILABLE
             logger.info(f"Pile {pile.code} status set to AVAILABLE as it is now empty.")
@@ -456,7 +371,7 @@ class ChargingScheduler:
         ChargingScheduler.check_and_call_waiting_cars(db)
         
         return True, "充电完成"
-    
+
     @staticmethod
     def check_and_finish_completed_charges(db: Session):
         """
@@ -469,40 +384,27 @@ class ChargingScheduler:
             charging_requests = db.query(CarRequest).filter(CarRequest.status == RequestStatus.CHARGING).all()
             
             if not charging_requests:
-                logger.info("--- Auto-finishing check: No active charging sessions found. ---")
+                # logger.info("--- Auto-finishing check: No active charging sessions found. ---")
                 return
 
             logger.info(f"--- Auto-finishing check: Found {len(charging_requests)} active charging session(s). Checking each one. ---")
             
-            finished_count = 0
             for req in charging_requests:
                 if not req.start_time or not req.pile_id:
                     logger.warning(f"--- Auto-finishing check: Skipping request {req.id} due to missing start_time or pile_id. ---")
                     continue
 
                 pile = db.query(ChargePile).filter(ChargePile.id == req.pile_id).first()
-                if not pile or pile.power == 0:
+                if not pile or pile.power <= 0:
                     logger.warning(f"--- Auto-finishing check: Skipping request {req.id} due to missing pile or pile power is zero. ---")
                     continue
 
-                # 计算进度
                 duration_hours = (datetime.now() - req.start_time).total_seconds() / 3600
                 charged_kwh = duration_hours * pile.power
-                progress = (charged_kwh / req.amount_kwh) * 100 if req.amount_kwh > 0 else 100
                 
-                logger.info(f"--- Auto-finishing check: Request {req.id} on Pile {pile.code} - Progress: {progress:.2f}% ({charged_kwh:.2f}/{req.amount_kwh:.2f} kWh).")
-                
-                if progress >= 100:
-                    logger.info(f"--- Auto-finishing check: Request {req.id} has reached 100% progress. Attempting to finish it automatically. ---")
-                    # 在一个独立的事务中完成充电，以避免会话冲突
+                if charged_kwh >= req.amount_kwh:
+                    logger.info(f"--- Auto-finishing check: Request {req.id} has reached 100% progress ({charged_kwh:.2f}/{req.amount_kwh:.2f} kWh). Attempting to finish it automatically. ---")
                     ChargingScheduler.finish_charging(db, req.id)
-                    finished_count += 1
-            
-            if finished_count > 0:
-                logger.info(f"--- Auto-finishing check: Successfully auto-finished {finished_count} completed charge(s). ---")
-            else:
-                logger.info("--- Auto-finishing check: No charges were ready to be finished in this cycle. ---")
-
         except Exception as e:
             logger.error(f"--- Auto-finishing check: An unexpected error occurred: {e} ---", exc_info=True)
 
@@ -511,83 +413,37 @@ class ChargingScheduler:
         """
         取消充电请求
         """
+        logger.info(f"--- Attempting to cancel request {request_id} ---")
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
             return False, "充电请求不存在"
-            
+
+        if request.status in [RequestStatus.FINISHED, RequestStatus.CANCELED]:
+            return False, f"无法取消状态为 {request.status} 的请求"
+
         old_status = request.status
         old_pile_id = request.pile_id
-        old_queue_position = request.queue_position
         
-        # 修改请求状态
-        request.status = RequestStatus.CANCELED
-        
-        # 创建队列日志
+        # 记录取消日志
         queue_log = QueueLog(
-            request_id=request.id,
-            from_status=old_status,
-            to_status=RequestStatus.CANCELED,
-            pile_id=old_pile_id,
-            queue_position=old_queue_position,
-            remark="取消充电请求"
+            request_id=request.id, from_status=old_status, to_status=RequestStatus.CANCELED,
+            remark=f"用户取消请求，原始状态: {old_status}"
         )
         db.add(queue_log)
+
+        # 更新请求状态
+        request.status = RequestStatus.CANCELED
+        request.pile_id = None
+        request.queue_position = None
+
+        db.commit()
+        logger.info(f"Request {request_id} status set to CANCELED.")
+
+        # 如果取消的是在充电桩队列中的车，需要进行后续处理
+        if old_status in [RequestStatus.QUEUING, RequestStatus.CHARGING] and old_pile_id:
+            logger.info(f"Request was in pile {old_pile_id}, proceeding to manage queue.")
+            # 重新触发一次完成流程，来处理队列晋升和状态更新
+            # 这是最安全的方式，因为它会检查队内下一辆车，并检查是否需要从等候区拉人
+            ChargingScheduler.finish_charging(db, request.id)
         
-        # 如果是在等候区，直接提交
-        if old_status == RequestStatus.WAITING:
-            db.commit()
-            return True, "成功取消等候区充电请求"
-            
-        # 如果是在充电区队列中
-        if old_status in [RequestStatus.QUEUING, RequestStatus.CHARGING]:
-            # 更新队列中其他车辆的位置
-            other_cars = (
-                db.query(CarRequest)
-                .filter(CarRequest.pile_id == old_pile_id)
-                .filter(CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING]))
-                .filter(CarRequest.id != request_id)
-                .all()
-            )
-            
-            for car in other_cars:
-                if car.queue_position > old_queue_position:
-                    car.queue_position -= 1
-            
-            db.commit()
-            
-            # 如果是正在充电的车辆，需要启动队列中下一辆车
-            if old_status == RequestStatus.CHARGING:
-                next_car = (
-                    db.query(CarRequest)
-                    .filter(CarRequest.pile_id == old_pile_id)
-                    .filter(CarRequest.status == RequestStatus.QUEUING)
-                    .filter(CarRequest.queue_position == 0)
-                    .first()
-                )
-                
-                if next_car:
-                    ChargingScheduler.start_charging(db, next_car.id)
-            
-            # 检查充电桩是否空闲
-            pile = db.query(ChargePile).filter(ChargePile.id == old_pile_id).first()
-            if pile:
-                charging_count = (
-                    db.query(CarRequest)
-                    .filter(CarRequest.pile_id == old_pile_id)
-                    .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
-                    .count()
-                )
-                
-                if charging_count == 0:
-                    pile.status = PileStatus.AVAILABLE
-                    db.commit()
-            
-            # 检查等候区是否有车可以调度
-            ChargingScheduler.check_and_call_waiting_cars(db)
-            
-            # 核心保障：先检查并结束已完成的充电，释放资源
-            ChargingScheduler.check_and_finish_completed_charges(db)
-            
-            return True, "成功取消充电区充电请求"
-        
-        return False, f"无法取消状态为 {old_status} 的充电请求" 
+        return True, "成功取消充电请求" 
