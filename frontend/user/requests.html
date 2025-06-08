@@ -370,6 +370,9 @@
                 const modal = document.getElementById('new-request-modal');
                 modal.style.display = 'none';
                 
+                // 重置表单
+                event.target.reset();
+                
                 // 重新加载请求
                 loadRequests();
             } catch (error) {
@@ -380,6 +383,8 @@
                 const submitBtn = event.target.querySelector('button[type="submit"]');
                 submitBtn.disabled = false;
                 submitBtn.textContent = '提交请求';
+                
+                // 不关闭模态框，让用户有机会修改并重试
             }
         }
         

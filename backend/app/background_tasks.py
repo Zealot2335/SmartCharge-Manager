@@ -1,3 +1,6 @@
+"""
+后台任务定义
+"""
 import logging
 from sqlalchemy.orm import Session
 from contextlib import contextmanager
@@ -16,20 +19,23 @@ def get_db_session():
     finally:
         db.close()
 
-def periodic_charge_check():
+def periodic_charge_check(db: Session):
     """
-    定期的充电检查任务.
-    这个函数会被APScheduler周期性调用.
+    定期检查并处理已完成的充电请求
+    这是系统的主调度循环，每隔一段时间会自动执行
     """
-    logger.info("--- Background Task: Running periodic check for completed charges ---")
     try:
-        with get_db_session() as db:
-            # 1. 检查并结束已完成的充电 (防止卡死)
-            ChargingScheduler.check_and_finish_completed_charges(db)
-            
-            # 2. 检查并呼叫等候区的车辆 (核心调度)
-            ChargingScheduler.check_and_call_waiting_cars(db)
-
-        logger.info("--- Background Task: Periodic check finished successfully ---")
+        logger.info("--- 后台任务: 运行定期充电检查 ---")
+        
+        # 每次运行前先确保数据状态一致
+        ChargingScheduler.fix_pile_charging_status(db)
+        
+        # 检查并自动完成已达到请求量的充电任务
+        scheduler = ChargingScheduler()
+        scheduler.check_and_finish_completed_charges(db)
+        
+        # 从等候区召唤车辆
+        scheduler.check_and_call_waiting_cars(db)
+        
     except Exception as e:
-        logger.error(f"--- Background Task: Error during periodic check: {e} ---", exc_info=True) 
+        logger.error(f"--- 后台任务: 定期检查期间发生错误: {e} ---", exc_info=True) 

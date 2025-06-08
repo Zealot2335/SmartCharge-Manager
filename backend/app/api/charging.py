@@ -63,36 +63,43 @@ async def create_charge_request(
     current_user: User = Depends(get_current_user)
 ):
     """提交充电请求"""
-    # 检查等候区是否已满
-    if not ChargingScheduler.check_waiting_area_capacity(db):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="等候区已满，请稍后再试"
+    try:
+        # 检查等候区是否已满
+        if not ChargingScheduler.check_waiting_area_capacity(db):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="等候区已满，请稍后再试"
+            )
+        
+        # 生成排队号码
+        queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
+        
+        # 创建充电请求
+        db_request = CarRequest(
+            user_id=current_user.user_id,
+            queue_number=queue_number,
+            mode=request.mode,
+            amount_kwh=request.amount_kwh,
+            battery_capacity=request.battery_capacity,
+            status=RequestStatus.WAITING,
+            request_time=datetime.now()
         )
-    
-    # 生成排队号码
-    queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
-    
-    # 创建充电请求
-    db_request = CarRequest(
-        user_id=current_user.user_id,
-        queue_number=queue_number,
-        mode=request.mode,
-        amount_kwh=request.amount_kwh,
-        battery_capacity=request.battery_capacity,
-        status=RequestStatus.WAITING,
-        request_time=datetime.now()
-    )
-    
-    db.add(db_request)
-    db.commit()
-    db.refresh(db_request)
-    
-    # 提交事务后再尝试调度
-    logger.info(f"New charge request {db_request.id} created, attempting to schedule.")
-    ChargingScheduler.check_and_call_waiting_cars(db)
-    
-    return db_request
+        
+        db.add(db_request)
+        db.commit()
+        db.refresh(db_request)
+        
+        # 提交事务后再尝试调度
+        logger.info(f"New charge request {db_request.id} created, attempting to schedule.")
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return db_request
+    except Exception as e:
+        logger.error(f"Error creating charge request: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"提交充电请求失败: {str(e)}"
+        )
 
 @router.get("/requests", response_model=List[ChargeRequest])
 async def get_user_requests(
@@ -162,7 +169,7 @@ async def get_charge_request(
         if request.pile_id:
             pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
             power = pile.power if pile else 30.0
-
+            
             # 如果是正在充电的车辆
             if request.status == RequestStatus.CHARGING and request.start_time:
                 result.wait_count = 0
@@ -334,45 +341,62 @@ async def get_queue_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取队列信息"""
-    # 查询等候区中该模式的车辆数量
-    waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
-    
-    # 获取该模式下的所有充电桩
-    piles = ChargingScheduler.get_all_piles_by_mode(db, mode)
-    pile_queues = {}
-    total_charging = 0
-    total_queuing = 0
-    
-    for pile in piles:
-        # 查询该充电桩的队列
-        queue = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile.id)
-            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
-            .order_by(CarRequest.queue_position)
-            .all()
-        )
+    try:
+        # 查询等候区中该模式的车辆数量
+        waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
         
-        charging = [q for q in queue if q.status == RequestStatus.CHARGING]
-        queuing = [q for q in queue if q.status == RequestStatus.QUEUING]
+        # 获取该模式下的所有充电桩
+        piles = ChargingScheduler.get_all_piles_by_mode(db, mode)
+        pile_queues = {}
+        total_charging = 0
+        total_queuing = 0
         
-        pile_queues[pile.code] = {
-            "total": len(queue),
-            "charging": len(charging),
-            "queuing": len(queuing)
+        for pile in piles:
+            # 查询该充电桩的所有车辆（充电中+排队中）
+            queue_cars = (
+                db.query(CarRequest)
+                .filter(CarRequest.pile_id == pile.id)
+                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                .order_by(CarRequest.queue_position)
+                .all()
+            )
+            
+            # 严格按照业务规则：只有队列位置为0的车辆可以充电，其他都是排队
+            charging_count = 0
+            queuing_count = 0
+            
+            for car in queue_cars:
+                if car.queue_position == 0 and car.status == RequestStatus.CHARGING:
+                    charging_count = 1  # 每个充电桩最多只有1辆车充电
+                else:
+                    queuing_count += 1
+                    # 记录数据不一致情况
+                    if car.status == RequestStatus.CHARGING and car.queue_position != 0:
+                        logger.warning(f"数据不一致: 车辆{car.id}状态为CHARGING但队列位置为{car.queue_position}")
+            
+            pile_queues[pile.code] = {
+                "total": len(queue_cars),
+                "charging": charging_count,  # 最多为1
+                "queuing": queuing_count
+            }
+            
+            total_charging += charging_count
+            total_queuing += queuing_count
+        
+        return {
+            "mode": mode,
+            "waiting_count": waiting_count,
+            "charging_count": total_charging,
+            "queuing_count": total_queuing,
+            "total_count": waiting_count + total_charging + total_queuing,
+            "pile_queues": pile_queues
         }
-        
-        total_charging += len(charging)
-        total_queuing += len(queuing)
-    
-    return {
-        "mode": mode,
-        "waiting_count": waiting_count,
-        "charging_count": total_charging,
-        "queuing_count": total_queuing,
-        "total_count": waiting_count + total_charging + total_queuing,
-        "pile_queues": pile_queues
-    }
+    except Exception as e:
+        logger.error(f"Error getting queue info: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取队列信息失败: {str(e)}"
+        )
 
 @router.post("/{request_id}/simulate", response_model=Dict[str, Any])
 async def simulate_charging(

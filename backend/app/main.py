@@ -8,12 +8,15 @@ import os
 import logging
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy.orm import Session
 
 from backend.app.api import auth, charging, billing, admin
 from backend.app.services.websocket import setup_websocket
 from backend.app.db.database import Base, engine
 from backend.app.core.config import get_system_config, get_db_url
 from backend.app.background_tasks import periodic_charge_check
+from backend.app.db.database import SessionLocal
+from backend.app.services.scheduler import ChargingScheduler
 
 # 配置日志
 logging.basicConfig(
@@ -78,15 +81,28 @@ async def health_check():
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
-    # 启动后台调度器
-    scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
-    scheduler.add_job(periodic_charge_check, 'interval', seconds=10, id="charge_check_job")
-    scheduler.start()
-    app.state.scheduler = scheduler
-    
-    db_url = get_db_url()
-    logger.info(f"应用启动，连接到数据库: {db_url}")
-    logger.info("后台定时任务已启动，每10秒检查一次充电完成情况。")
+    # 初始化数据库会话
+    db = SessionLocal()
+    try:
+        # 修复充电桩队列数据
+        ChargingScheduler.fix_pile_charging_status(db)
+        
+        # 启动后台调度器
+        scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+        scheduler.add_job(
+            lambda: periodic_charge_check(SessionLocal()),  # 每次创建新的数据库会话
+            'interval',
+            seconds=10,
+            id='periodic_charge_check'
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        
+        db_url = get_db_url()
+        logger.info(f"应用启动，连接到数据库: {db_url}")
+        logger.info("后台定时任务已启动，每10秒检查一次充电完成情况。")
+    finally:
+        db.close()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -103,4 +119,4 @@ if __name__ == "__main__":
     port = int(settings.get("port", 8000))
     
     # 启动服务器
-    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True)
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=False)

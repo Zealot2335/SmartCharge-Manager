@@ -152,8 +152,8 @@
                 loadAdminPilesStatus();
             } else {
                 // 对于普通用户，队列信息包含了充电状态的概览
-                loadQueueInfo('FAST');
-                loadQueueInfo('SLOW');
+            loadQueueInfo('FAST');
+            loadQueueInfo('SLOW');
             }
             
             // 绑定表单提交事件
@@ -255,7 +255,7 @@
                 } else {
                     updateMainStatusCard(queueInfo, 'slow');
                 }
-
+                
                 // 显示队列信息
                 let html = `
                     <div class="queue-summary">
@@ -360,6 +360,16 @@
                 // 成功提示
                 Utils.showNotification('充电请求已提交，排队号码: ' + result.queue_number, 'success');
                 
+                // 触发充电请求更新事件
+                window.dispatchEvent(new CustomEvent('charge-request-updated'));
+                
+                // 重置表单
+                event.target.reset();
+                
+                // 启用表单
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交充电请求';
+                
                 // 重定向到请求详情页
                 setTimeout(() => {
                     window.location.href = `/user/request.html?id=${result.id}`;
@@ -388,7 +398,7 @@
                 // 刷新队列信息
                 console.log(`收到 ${data.mode} 队列更新...`);
                 if (!API.auth.isAdmin()) {
-                    loadQueueInfo(data.mode);
+                loadQueueInfo(data.mode);
                 }
                 updateWaitingAreaStatus(); // 更新等候区
             });

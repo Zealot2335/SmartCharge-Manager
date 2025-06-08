@@ -79,20 +79,15 @@ class ChargingScheduler:
     def get_available_piles_for_dispatch(db: Session, mode: ChargeMode) -> List[ChargePile]:
         """获取指定模式下可用于调度的充电桩 (状态为可用或繁忙，且队列未满)"""
         pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
-        logger.info(f"--- Getting available piles for {pile_type} mode ---")
         all_piles = db.query(ChargePile).filter(
             ChargePile.type == pile_type,
             ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY])
         ).all()
-        logger.info(f"Found {len(all_piles)} piles with status AVAILABLE or BUSY.")
 
         available_piles = []
         for pile in all_piles:
-            is_available = ChargingScheduler.check_pile_queue_available(db, pile.id)
-            if is_available:
+            if ChargingScheduler.check_pile_queue_available(db, pile.id):
                 available_piles.append(pile)
-        
-        logger.info(f"--- Finished getting available piles. Found {len(available_piles)} piles with queue space. ---")
         return available_piles
 
     @staticmethod
@@ -107,11 +102,11 @@ class ChargingScheduler:
     
     @staticmethod
     def get_pile_queue_length(db: Session, pile_id: int) -> int:
-        """获取指定充电桩的当前队列长度（只计算正在排队的）"""
+        """获取指定充电桩的当前队列长度（仅包括排队的）"""
         return (
             db.query(CarRequest)
             .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status == RequestStatus.QUEUING) # 只计算排队中的车辆
+            .filter(CarRequest.status == RequestStatus.QUEUING)
             .count()
         )
     
@@ -121,27 +116,15 @@ class ChargingScheduler:
         config = get_station_config()
         queue_len = config.get("ChargingQueueLen", 2)
         
-        pile = db.query(ChargePile).get(pile_id)
-        current_queue_length = ChargingScheduler.get_pile_queue_length(db, pile_id)
+        # 计算充电桩当前队列长度（包括充电中和排队中的车辆）
+        current_queue_length = (
+            db.query(CarRequest)
+            .filter(CarRequest.pile_id == pile_id)
+            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+            .count()
+        )
         
-        # 正在充电的车辆数
-        charging_count = db.query(CarRequest).filter(
-            CarRequest.pile_id == pile_id, 
-            CarRequest.status == RequestStatus.CHARGING
-        ).count()
-
-        # 总占用 = 正在充电 + 正在排队
-        total_occupied = charging_count + current_queue_length
-        is_available = total_occupied < queue_len
-
-        logger.info(f"Checking pile {pile.code if pile else 'N/A'} (ID: {pile_id}): "
-                    f"Charging={charging_count}, "
-                    f"Queuing={current_queue_length}, "
-                    f"TotalOccupied={total_occupied}, "
-                    f"QueueCapacity={queue_len}, "
-                    f"HasSpace={is_available}")
-
-        return is_available
+        return current_queue_length < queue_len
     
     @staticmethod
     def get_pile_queue_waiting_time(db: Session, pile_id: int) -> float:
@@ -216,7 +199,17 @@ class ChargingScheduler:
         将请求分配到充电桩队列
         """
         try:
-            queue_position = ChargingScheduler.get_pile_queue_length(db, pile.id)
+            # 获取当前队列中的车辆数量（充电中+排队中）
+            current_queue = (
+                db.query(CarRequest)
+                .filter(CarRequest.pile_id == pile.id)
+                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                .order_by(CarRequest.queue_position)
+                .all()
+            )
+            
+            # 计算新车的队列位置
+            queue_position = len(current_queue)
             
             old_status = request.status
             request.status = RequestStatus.QUEUING
@@ -475,4 +468,60 @@ class ChargingScheduler:
             # 这是最安全的方式，因为它会检查队内下一辆车，并检查是否需要从等候区拉人
             ChargingScheduler.finish_charging(db, request.id)
         
-        return True, "成功取消充电请求" 
+        return True, "成功取消充电请求"
+
+    @staticmethod
+    def fix_pile_charging_status(db: Session):
+        """
+        修复充电桩队列数据 - 系统启动时调用
+        确保每个充电桩只有位置0的车辆处于CHARGING状态
+        """
+        logger.info("执行修复充电桩队列数据的操作...")
+        try:
+            # 获取所有充电桩
+            piles = db.query(ChargePile).all()
+            for pile in piles:
+                # 获取该充电桩的所有排队车辆
+                queue_cars = (
+                    db.query(CarRequest)
+                    .filter(CarRequest.pile_id == pile.id)
+                    .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                    .order_by(CarRequest.queue_position)
+                    .all()
+                )
+                
+                # 如果队列为空，确保充电桩状态为AVAILABLE
+                if not queue_cars and pile.status == PileStatus.BUSY:
+                    pile.status = PileStatus.AVAILABLE
+                    logger.info(f"修复: 充电桩 {pile.code} 没有车辆但状态为BUSY，已改为AVAILABLE")
+                    continue
+                
+                # 检查队列中的车辆状态
+                for i, car in enumerate(queue_cars):
+                    if i == 0 and car.status == RequestStatus.QUEUING:
+                        # 第一个位置的车应该在充电
+                        car.status = RequestStatus.CHARGING
+                        car.start_time = datetime.now()
+                        logger.info(f"修复: 将队列位置0的车辆 {car.id} 状态从QUEUING改为CHARGING")
+                        
+                        # 确保充电桩状态为BUSY
+                        if pile.status == PileStatus.AVAILABLE:
+                            pile.status = PileStatus.BUSY
+                            logger.info(f"修复: 充电桩 {pile.code} 有车辆充电但状态为AVAILABLE，已改为BUSY")
+                    
+                    elif i > 0 and car.status == RequestStatus.CHARGING:
+                        # 非第一个位置的车不应该在充电
+                        car.status = RequestStatus.QUEUING
+                        car.start_time = None
+                        logger.info(f"修复: 将非队列位置0的车辆 {car.id} 状态从CHARGING改为QUEUING")
+                    
+                    # 确保队列位置正确
+                    if car.queue_position != i:
+                        logger.info(f"修复: 车辆 {car.id} 队列位置从 {car.queue_position} 改为 {i}")
+                        car.queue_position = i
+            
+            db.commit()
+            logger.info("充电桩队列数据修复完成")
+        except Exception as e:
+            logger.error(f"修复充电桩队列数据失败: {e}", exc_info=True)
+            db.rollback() 
