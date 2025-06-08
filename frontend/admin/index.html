@@ -160,6 +160,13 @@
             // 加载最近请求
             loadRecentRequests();
             
+            // 设置定时刷新
+            setInterval(() => {
+                loadStatistics();
+                loadPileStatus();
+                loadQueueStatus();
+            }, 5000); // 每5秒刷新一次
+
             // 连接WebSocket
             setupWebSocket();
         });
@@ -272,6 +279,22 @@
                 buttons = `<button class="btn btn-sm btn-danger" onclick="handleShutdown('${pile.code}')">禁用</button>`;
             }
 
+            // 根据状态显示不同的详情
+            let details = '';
+            if (pile.status === 'BUSY' && pile.charging_car) {
+                const car = pile.charging_car;
+                const progress = car.charged_kwh && car.amount_kwh ? (car.charged_kwh / car.amount_kwh * 100).toFixed(1) : 0;
+                details = `
+                    <p>车辆: ${car.queue_number}</p>
+                    <p>进度: ${Utils.formatKwh(car.charged_kwh || 0)} / ${Utils.formatKwh(car.amount_kwh, 2)} (${progress}%)</p>
+                `;
+            } else {
+                details = `
+                    <p>功率: ${pile.power} kW</p>
+                    <p>累计: ${Utils.formatKwh(pile.total_charge_amount)} / ${Utils.formatMinutes(pile.total_charge_time)}</p>
+                `;
+            }
+
             return `
                 <div class="pile-card" id="pile-card-${pile.code}">
                     <div class="pile-header">
@@ -279,8 +302,7 @@
                         <span class="status-label ${statusClass}">${statusName}</span>
                     </div>
                     <div class="pile-body">
-                        <p>功率: ${pile.power} kW</p>
-                        <p>累计: ${Utils.formatKwh(pile.total_charge_amount)} / ${Utils.formatMinutes(pile.total_charge_time)}</p>
+                        ${details}
                     </div>
                     <div class="pile-footer">
                         <button class="btn btn-sm btn-secondary" onclick="showPileDetails('${pile.code}')">详情</button>

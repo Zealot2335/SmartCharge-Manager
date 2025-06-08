@@ -123,40 +123,46 @@ async def get_charge_request(
     
     elif request.status in [RequestStatus.QUEUING, RequestStatus.CHARGING]:
         if request.pile_id:
-            # 计算在该充电桩排队的预计等待时间
-            waiting_time = ChargingScheduler.get_pile_queue_waiting_time(db, request.pile_id)
-            
-            # 如果是正在充电的车辆，等待时间为0
-            if request.status == RequestStatus.CHARGING:
+            pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+            power = pile.power if pile else 30.0
+
+            # 如果是正在充电的车辆
+            if request.status == RequestStatus.CHARGING and request.start_time:
                 result.wait_count = 0
                 result.estimated_wait_time = 0
                 
-                # 计算自身充电时间
-                power = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first().power
-                charging_time = request.amount_kwh / power * 60  # 转换为分钟
+                # 计算实时充电数据
+                charging_duration = datetime.now() - request.start_time
+                result.charging_minutes = charging_duration.total_seconds() / 60
+                
+                power_per_minute = power / 60
+                result.charged_kwh = min(power_per_minute * result.charging_minutes, request.amount_kwh)
+                
+                remaining_kwh = request.amount_kwh - result.charged_kwh
+                result.remaining_minutes = (remaining_kwh / power) * 60 if power > 0 else 0
+                
+                result.progress = (result.charged_kwh / request.amount_kwh) * 100 if request.amount_kwh > 0 else 100
                 
                 # 估计完成时间
-                start_time = request.start_time or datetime.now()
-                result.estimated_finish_time = start_time + timedelta(minutes=charging_time)
-            else:
-                # 排队中的车辆
+                result.estimated_finish_time = datetime.now() + timedelta(minutes=result.remaining_minutes)
+            
+            else: # 排队中的车辆
                 # 计算前面排队的车辆数
                 result.wait_count = (
                     db.query(CarRequest)
                     .filter(CarRequest.pile_id == request.pile_id)
+                    .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
                     .filter(CarRequest.queue_position < request.queue_position)
                     .count()
                 )
                 
-                # 计算自身充电时间
-                power = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first().power
-                charging_time = request.amount_kwh / power * 60  # 转换为分钟
+                # 估算在它前面的所有车辆的总充电时间
+                wait_time_minutes = ChargingScheduler.get_pile_queue_waiting_time(db, request.pile_id, request.queue_position)
+                result.estimated_wait_time = wait_time_minutes
                 
-                # 估计等待时间 = 队列等待时间 - 自身充电时间
-                result.estimated_wait_time = waiting_time - charging_time
-                
-                # 估计完成时间
-                result.estimated_finish_time = datetime.now() + timedelta(minutes=waiting_time)
+                # 加上自己的充电时间
+                own_charging_time = (request.amount_kwh / power) * 60 if power > 0 else 0
+                result.estimated_finish_time = datetime.now() + timedelta(minutes=(wait_time_minutes + own_charging_time))
     
     return result
 
@@ -356,7 +362,18 @@ async def simulate_charging(
             detail="没有权限执行此操作"
         )
     
-    # 模拟充电进度
+    # 当进度达到100%时，我们不再是"模拟"，而是要真正地"完成"充电
+    if progress >= 100:
+        logger.info(f"Simulate endpoint received 100% progress for request {request_id}. Finishing charging.")
+        success, message = ChargingScheduler.finish_charging(db, request_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to finish charging: {message}"
+            )
+        return {"message": message}
+
+    # 如果进度不到100%，则仍然走模拟逻辑 (虽然在当前场景下不太可能)
     success, message = ChargingService.simulate_charging_progress(db, request_id, progress)
     
     if not success:

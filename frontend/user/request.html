@@ -64,6 +64,8 @@
         const urlParams = new URLSearchParams(window.location.search);
         const requestId = urlParams.get('id');
         
+        let progressUpdater = null; // 用于存储定时器ID
+        
         // 充电会话ID
         let sessionId = null;
         
@@ -170,16 +172,18 @@
                     cancelBtn.addEventListener('click', () => cancelRequest(requestId));
                 }
                 
-                // 如果正在充电或已完成，显示充电状态
-                if (request.status === 'CHARGING' || request.status === 'FINISHED') {
+                // 根据状态处理进度更新
+                if (request.status === 'CHARGING') {
                     document.getElementById('charging-status-card').style.display = 'block';
-                    loadChargingStatus();
-                }
-                
-                // 如果已完成，显示账单信息
-                if (request.status === 'FINISHED') {
-                    document.getElementById('bill-card').style.display = 'block';
-                    loadBillDetails();
+                    startProgressUpdater();
+                } else {
+                    if (progressUpdater) clearInterval(progressUpdater); // 停止更新
+                    if (request.status === 'FINISHED') {
+                        document.getElementById('charging-status-card').style.display = 'block';
+                        document.getElementById('bill-card').style.display = 'block';
+                        loadChargingStatus();
+                        loadBillDetails();
+                    }
                 }
                 
                 // 保存会话ID
@@ -192,6 +196,13 @@
             }
         }
         
+        function startProgressUpdater() {
+            if (progressUpdater) clearInterval(progressUpdater); // 先清除旧的
+            
+            loadChargingStatus(); // 立即执行一次
+            progressUpdater = setInterval(loadChargingStatus, 5000); // 每5秒执行
+        }
+        
         // 加载充电状态
         async function loadChargingStatus() {
             const statusContainer = document.getElementById('charging-status');
@@ -199,6 +210,19 @@
             try {
                 // 获取充电状态
                 const status = await API.charging.getChargeState(requestId);
+                
+                // 检查是否完成
+                if (status.progress >= 100) {
+                    if (progressUpdater) clearInterval(progressUpdater);
+                    Utils.showNotification('充电已完成!', 'success');
+                    
+                    // 调用API通知后端，但不等待其完成
+                    API.charging.simulateCharging(requestId, 100).catch(e => console.error("Simulate charging failed", e));
+                    
+                    // 2秒后重新加载页面详情，届时状态会变为FINISHED
+                    setTimeout(() => loadRequestDetails(), 2000);
+                    return;
+                }
                 
                 // 显示充电状态
                 let html = `

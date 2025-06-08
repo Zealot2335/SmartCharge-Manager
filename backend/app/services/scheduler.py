@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 import logging
 
-from backend.app.db.models import ChargePile, CarRequest, QueueLog
+from backend.app.db.models import ChargePile, CarRequest, QueueLog, ChargeSession
 from backend.app.db.schemas import ChargeMode, PileStatus, RequestStatus
 from backend.app.core.config import get_station_config
+from backend.app.services.billing import BillingService
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +96,11 @@ class ChargingScheduler:
     
     @staticmethod
     def get_pile_queue_length(db: Session, pile_id: int) -> int:
-        """获取指定充电桩的当前队列长度（只计算正在充电的）"""
+        """获取指定充电桩的当前队列长度（包括正在充电和排队的）"""
         return (
             db.query(CarRequest)
             .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status == RequestStatus.CHARGING)
+            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
             .count()
         )
     
@@ -113,34 +114,45 @@ class ChargingScheduler:
         return current_queue_length < queue_len
     
     @staticmethod
-    def get_pile_queue_waiting_time(db: Session, pile_id: int) -> float:
+    def get_pile_queue_waiting_time(db: Session, pile_id: int, before_position: Optional[int] = None) -> float:
         """
-        计算指定充电桩的队列等待时间(分钟)
+        计算指定充电桩队列在某个位置之前的预计等待时间(分钟)
+        :param pile_id: 充电桩ID
+        :param before_position: 计算截止到的队列位置(不包含此位置), 如果为None则计算整个队列
         """
         pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if not pile:
-            return float('inf')  # 找不到充电桩，返回无穷大
-            
-        # 获取充电桩功率 (kWh/h)
+        if not pile or pile.power == 0:
+            return 0.0
+
         power = pile.power
         
-        # 查询排队中的请求
-        queuing_requests = (
+        # 查询此位置前排队中的请求
+        query = (
             db.query(CarRequest)
             .filter(CarRequest.pile_id == pile_id)
             .filter(CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING]))
-            .order_by(CarRequest.queue_position)
-            .all()
         )
+        
+        if before_position is not None:
+            query = query.filter(CarRequest.queue_position < before_position)
+            
+        queuing_requests = query.order_by(CarRequest.queue_position).all()
         
         # 计算总等待时间(分钟)
         total_waiting_time = 0.0
         for request in queuing_requests:
-            # 充电时间(小时) = 请求充电量 / 充电功率
-            charging_time_hours = request.amount_kwh / power
-            # 转换为分钟
-            charging_time_minutes = charging_time_hours * 60
-            total_waiting_time += charging_time_minutes
+            if request.status == RequestStatus.CHARGING and request.start_time:
+                # 正在充电的车辆，计算剩余充电时间
+                already_charged_duration = (datetime.now() - request.start_time).total_seconds() / 3600 # hours
+                already_charged_kwh = already_charged_duration * power
+                remaining_kwh = request.amount_kwh - already_charged_kwh
+                if remaining_kwh > 0:
+                    remaining_time_hours = remaining_kwh / power
+                    total_waiting_time += remaining_time_hours * 60
+            else:
+                # 排队中的车辆，计算完整充电时间
+                charging_time_hours = request.amount_kwh / power
+                total_waiting_time += charging_time_hours * 60
             
         return total_waiting_time
     
@@ -303,9 +315,18 @@ class ChargingScheduler:
     @staticmethod
     def check_and_call_waiting_cars(db: Session) -> List[int]:
         """
-        检查并调用等候区的车辆
-        返回被调度的请求ID列表
+        检查并呼叫等候区的车辆
+        这是调度的主要入口点
         """
+        logger.info("--- Main Scheduler: Checking and calling waiting cars ---")
+
+        # 核心保障：先检查并结束已完成的充电，释放资源
+        ChargingScheduler.check_and_finish_completed_charges(db)
+
+        # 获取所有可用充电桩 (快充和慢充)
+        fast_piles = ChargingScheduler.get_available_piles(db, ChargeMode.FAST)
+        slow_piles = ChargingScheduler.get_available_piles(db, ChargeMode.SLOW)
+
         scheduled_cars = []
         for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
             while True:
@@ -355,61 +376,136 @@ class ChargingScheduler:
     @staticmethod
     def finish_charging(db: Session, request_id: int) -> Tuple[bool, str]:
         """
-        完成充电请求
-        一个车辆充电完成后，需要释放资源，并检查是否可以调度下一辆车
+        完成充电, 并处理后续调度
         """
+        logger.info(f"--- Attempting to finish charging for request_id: {request_id} ---")
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
+            logger.error(f"Finish charging failed: Request {request_id} not found.")
             return False, "充电请求不存在"
 
         if request.status != RequestStatus.CHARGING:
-            return False, "请求不在充电状态"
+            logger.warning(f"Finish charging called on a non-charging request. Status: {request.status}")
+            return False, f"充电请求状态为 {request.status}，无法完成充电"
 
-        old_pile_id = request.pile_id
-        old_status = request.status
+        pile_id = request.pile_id
+        if not pile_id:
+            logger.error(f"FATAL: Request {request_id} is CHARGING but has no pile_id.")
+            request.status = RequestStatus.FINISHED
+            db.commit()
+            return False, "请求状态不一致"
 
-        # 更新请求状态
+        pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
+        if not pile:
+            logger.error(f"Finish charging failed: Pile {pile_id} not found for request {request_id}.")
+            return False, "充电桩不存在"
+
+        # 1. 结算账单
+        active_session = db.query(ChargeSession).filter(ChargeSession.request_id == request_id, ChargeSession.status == "CHARGING").first()
+        if active_session:
+            session = BillingService.complete_charge_session(db, active_session.id)
+            if not session:
+                logger.error(f"Billing session for request {request_id} (session {active_session.id}) could not be finalized.")
+        else:
+            logger.warning(f"Could not find an active charging session for request {request_id} to finalize billing.")
+
+        # 2. 记录日志并释放已完成的请求
+        queue_log = QueueLog(
+            request_id=request.id,
+            from_status=RequestStatus.CHARGING,
+            to_status=RequestStatus.FINISHED,
+            pile_id=pile.id,
+            queue_position=request.queue_position,
+            remark=f"充电完成，从充电桩 {pile.code} 释放"
+        )
+        db.add(queue_log)
+        
         request.status = RequestStatus.FINISHED
         request.end_time = datetime.now()
         request.pile_id = None
         request.queue_position = None
-
-        # 记录日志
-        queue_log = QueueLog(
-            request_id=request.id,
-            from_status=old_status,
-            to_status=RequestStatus.FINISHED,
-            remark="充电完成"
-        )
-        db.add(queue_log)
-
-        # --- 修复核心逻辑 ---
-        if old_pile_id:
-            # 1. 尝试启动该充电桩队列中的下一辆车
-            next_in_queue = (
-                db.query(CarRequest)
-                .filter(CarRequest.pile_id == old_pile_id)
-                .filter(CarRequest.status == RequestStatus.QUEUING)
-                .order_by(CarRequest.queue_position)
-                .first()
-            )
-            
-            if next_in_queue:
-                # 如果队列有车，启动它
-                ChargingScheduler.start_charging(db, next_in_queue.id)
-            else:
-                # 如果队列没车了，将充电桩设为空闲
-                pile = db.query(ChargePile).filter(ChargePile.id == old_pile_id).first()
-                if pile:
-                    pile.status = PileStatus.AVAILABLE
-
-            # 2. 尝试从等候区调用一辆车来填补空位
-            ChargingScheduler.check_and_call_waiting_cars(db)
-        # --- 修复结束 ---
-
         db.commit()
-        return True, "成功完成充电"
+        logger.info(f"Request {request_id} has finished and is released. Now managing the queue for pile {pile.code}.")
+
+        # 3. "队内晋升": 处理桩内剩余的排队车辆
+        remaining_cars = db.query(CarRequest).filter(CarRequest.pile_id == pile.id).order_by(CarRequest.queue_position).all()
+        if remaining_cars:
+            logger.info(f"Found {len(remaining_cars)} car(s) remaining in pile {pile.code}'s queue. Updating positions.")
+            for car in remaining_cars:
+                if car.queue_position > 0:
+                    car.queue_position -= 1
+            db.commit()
+
+            next_car_to_charge = db.query(CarRequest).filter(CarRequest.pile_id == pile.id, CarRequest.queue_position == 0).first()
+            if next_car_to_charge and next_car_to_charge.status == RequestStatus.QUEUING:
+                logger.info(f"Promoting request {next_car_to_charge.id} to start charging on pile {pile.code}.")
+                ChargingScheduler.start_charging(db, next_car_to_charge.id)
+
+        # 4. 更新充电桩状态
+        final_car_count = db.query(CarRequest).filter(CarRequest.pile_id == pile.id).count()
+        if final_car_count == 0:
+            pile.status = PileStatus.AVAILABLE
+            logger.info(f"Pile {pile.code} status set to AVAILABLE as it is now empty.")
+        else:
+            pile.status = PileStatus.BUSY
+            logger.info(f"Pile {pile.code} remains BUSY with {final_car_count} car(s) in its queue.")
+        db.commit()
+
+        # 5. 触发全局调度
+        logger.info(f"Pile {pile.code} queue management finished. Now checking main waiting area for new cars to schedule.")
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return True, "充电完成"
     
+    @staticmethod
+    def check_and_finish_completed_charges(db: Session):
+        """
+        检查并结束所有已完成的充电任务
+        这是为了防止客户端没有上报完成状态导致调度卡死的核心保障机制
+        """
+        logger.info("--- Auto-finishing check: Starting scan for completed charges. ---")
+        
+        try:
+            charging_requests = db.query(CarRequest).filter(CarRequest.status == RequestStatus.CHARGING).all()
+            
+            if not charging_requests:
+                logger.info("--- Auto-finishing check: No active charging sessions found. ---")
+                return
+
+            logger.info(f"--- Auto-finishing check: Found {len(charging_requests)} active charging session(s). Checking each one. ---")
+            
+            finished_count = 0
+            for req in charging_requests:
+                if not req.start_time or not req.pile_id:
+                    logger.warning(f"--- Auto-finishing check: Skipping request {req.id} due to missing start_time or pile_id. ---")
+                    continue
+
+                pile = db.query(ChargePile).filter(ChargePile.id == req.pile_id).first()
+                if not pile or pile.power == 0:
+                    logger.warning(f"--- Auto-finishing check: Skipping request {req.id} due to missing pile or pile power is zero. ---")
+                    continue
+
+                # 计算进度
+                duration_hours = (datetime.now() - req.start_time).total_seconds() / 3600
+                charged_kwh = duration_hours * pile.power
+                progress = (charged_kwh / req.amount_kwh) * 100 if req.amount_kwh > 0 else 100
+                
+                logger.info(f"--- Auto-finishing check: Request {req.id} on Pile {pile.code} - Progress: {progress:.2f}% ({charged_kwh:.2f}/{req.amount_kwh:.2f} kWh).")
+                
+                if progress >= 100:
+                    logger.info(f"--- Auto-finishing check: Request {req.id} has reached 100% progress. Attempting to finish it automatically. ---")
+                    # 在一个独立的事务中完成充电，以避免会话冲突
+                    ChargingScheduler.finish_charging(db, req.id)
+                    finished_count += 1
+            
+            if finished_count > 0:
+                logger.info(f"--- Auto-finishing check: Successfully auto-finished {finished_count} completed charge(s). ---")
+            else:
+                logger.info("--- Auto-finishing check: No charges were ready to be finished in this cycle. ---")
+
+        except Exception as e:
+            logger.error(f"--- Auto-finishing check: An unexpected error occurred: {e} ---", exc_info=True)
+
     @staticmethod
     def cancel_charging(db: Session, request_id: int) -> Tuple[bool, str]:
         """
@@ -488,6 +584,9 @@ class ChargingScheduler:
             
             # 检查等候区是否有车可以调度
             ChargingScheduler.check_and_call_waiting_cars(db)
+            
+            # 核心保障：先检查并结束已完成的充电，释放资源
+            ChargingScheduler.check_and_finish_completed_charges(db)
             
             return True, "成功取消充电区充电请求"
         

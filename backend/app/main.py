@@ -7,11 +7,13 @@ import uvicorn
 import os
 import logging
 from pathlib import Path
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from backend.app.api import auth, charging, billing, admin
 from backend.app.services.websocket import setup_websocket
 from backend.app.db.database import Base, engine
 from backend.app.core.config import get_system_config, get_db_url
+from backend.app.background_tasks import periodic_charge_check
 
 # 配置日志
 logging.basicConfig(
@@ -36,9 +38,16 @@ app = FastAPI(
 )
 
 # 配置CORS
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，生产环境应该限制
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,13 +78,22 @@ async def health_check():
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
+    # 启动后台调度器
+    scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+    scheduler.add_job(periodic_charge_check, 'interval', seconds=10, id="charge_check_job")
+    scheduler.start()
+    app.state.scheduler = scheduler
+    
     db_url = get_db_url()
     logger.info(f"应用启动，连接到数据库: {db_url}")
-    logger.info("应用启动")
+    logger.info("后台定时任务已启动，每10秒检查一次充电完成情况。")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("应用关闭")
+    if app.state.scheduler.running:
+        app.state.scheduler.shutdown()
+        logger.info("后台定时任务已关闭。")
 
 # 直接运行时的入口点
 if __name__ == "__main__":
