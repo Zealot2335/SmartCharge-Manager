@@ -134,6 +134,30 @@ class ChargeRequestDetail(ChargeRequest):
     wait_count: int = 0  # 等待人数
     estimated_wait_time: Optional[float] = None  # 预计等待时间(分钟)
     estimated_finish_time: Optional[datetime] = None  # 预计完成时间
+    pile_code: Optional[str] = None  # 充电桩编号
+    charging_minutes: Optional[float] = None  # 充电时长(分钟)
+    charged_kwh: Optional[float] = None  # 已充电量(kWh)
+    remaining_minutes: Optional[float] = None  # 剩余时间(分钟)
+    progress: Optional[float] = None  # 充电进度(%)
+    session_id: Optional[int] = None  # 会话ID
+
+    class Config:
+        from_attributes = True
+        # 添加自定义处理
+        @classmethod
+        def from_orm(cls, obj):
+            # 首先使用标准方法处理基础属性
+            instance = super().from_orm(obj)
+            
+            # 确保额外属性有默认值
+            if instance.wait_count is None:
+                instance.wait_count = 0
+            if instance.charged_kwh is None:
+                instance.charged_kwh = 0.0
+            if instance.progress is None:
+                instance.progress = 0.0
+                
+            return instance
 
 # 充电会话模型
 class ChargeSessionBase(BaseModel):

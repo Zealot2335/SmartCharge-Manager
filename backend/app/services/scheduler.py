@@ -127,36 +127,59 @@ class ChargingScheduler:
         return current_queue_length < queue_len
     
     @staticmethod
-    def get_pile_queue_waiting_time(db: Session, pile_id: int) -> float:
+    def get_pile_queue_waiting_time(db: Session, pile_id: int, queue_position: Optional[int] = None) -> float:
         """
         计算指定充电桩队列的总预计等待时间(分钟)
+        如果提供了queue_position，则只计算位置小于该值的车辆的等待时间
         """
-        pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
-        if not pile or pile.power == 0:
-            return float('inf')
-
-        power = pile.power
-        
-        queuing_requests = db.query(CarRequest).filter(
-            CarRequest.pile_id == pile_id,
-            CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING])
-        ).order_by(CarRequest.queue_position).all()
-        
-        total_waiting_time = 0.0
-        for request in queuing_requests:
-            if request.status == RequestStatus.CHARGING and request.start_time:
-                # 正在充电的车辆，计算剩余充电时间
-                duration_hours = (datetime.now() - request.start_time).total_seconds() / 3600
-                charged_kwh = duration_hours * power
-                remaining_kwh = max(0, request.amount_kwh - charged_kwh)
-                remaining_time_hours = remaining_kwh / power
-                total_waiting_time += remaining_time_hours * 60
-            else:
-                # 排队中的车辆，计算完整充电时间
-                charging_time_hours = request.amount_kwh / power
-                total_waiting_time += charging_time_hours * 60
+        try:
+            logger.info(f"计算充电桩 {pile_id} 的等待时间，队列位置条件: {queue_position}")
             
-        return total_waiting_time
+            pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
+            if not pile:
+                logger.warning(f"充电桩 {pile_id} 不存在")
+                return float('inf')
+                
+            if pile.power <= 0:
+                logger.warning(f"充电桩 {pile_id} 功率为0或负值: {pile.power}")
+                return float('inf')
+
+            power = pile.power
+            
+            query = db.query(CarRequest).filter(
+                CarRequest.pile_id == pile_id,
+                CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING])
+            )
+            
+            # 如果指定了队列位置，只计算该位置之前的车辆
+            if queue_position is not None:
+                query = query.filter(CarRequest.queue_position < queue_position)
+            
+            queuing_requests = query.order_by(CarRequest.queue_position).all()
+            logger.info(f"找到 {len(queuing_requests)} 辆队列中的车辆需要计算等待时间")
+            
+            total_waiting_time = 0.0
+            for request in queuing_requests:
+                if request.status == RequestStatus.CHARGING and request.start_time:
+                    # 正在充电的车辆，计算剩余充电时间
+                    duration_hours = (datetime.now() - request.start_time).total_seconds() / 3600
+                    charged_kwh = duration_hours * power
+                    remaining_kwh = max(0, request.amount_kwh - charged_kwh)
+                    remaining_time_hours = remaining_kwh / power
+                    total_waiting_time += remaining_time_hours * 60
+                    logger.info(f"车辆 {request.id} 正在充电，已充 {charged_kwh:.2f} kWh，剩余 {remaining_kwh:.2f} kWh，剩余时间 {remaining_time_hours*60:.2f} 分钟")
+                else:
+                    # 排队中的车辆，计算完整充电时间
+                    charging_time_hours = request.amount_kwh / power
+                    total_waiting_time += charging_time_hours * 60
+                    logger.info(f"车辆 {request.id} 在排队中，需要充电 {request.amount_kwh:.2f} kWh，预计需要 {charging_time_hours*60:.2f} 分钟")
+            
+            logger.info(f"充电桩 {pile_id} 的总等待时间: {total_waiting_time:.2f} 分钟")
+            return total_waiting_time
+            
+        except Exception as e:
+            logger.error(f"计算充电桩 {pile_id} 等待时间时发生错误: {e}", exc_info=True)
+            return float('inf')
     
     @staticmethod
     def calculate_total_finish_time(db: Session, pile_id: int, amount_kwh: float) -> float:
@@ -167,6 +190,7 @@ class ChargingScheduler:
         if not pile or pile.power <= 0:
             return float('inf')
             
+        # 获取当前队列所有车辆的等待时间
         waiting_time = ChargingScheduler.get_pile_queue_waiting_time(db, pile_id)
         self_charging_time_minutes = (amount_kwh / pile.power) * 60
         
@@ -524,4 +548,15 @@ class ChargingScheduler:
             logger.info("充电桩队列数据修复完成")
         except Exception as e:
             logger.error(f"修复充电桩队列数据失败: {e}", exc_info=True)
-            db.rollback() 
+            db.rollback()
+
+    @staticmethod
+    def get_available_piles(db: Session, mode: ChargeMode) -> List[ChargePile]:
+        """获取指定模式下可用的充电桩(状态为可用或繁忙)"""
+        pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
+        return (
+            db.query(ChargePile)
+            .filter(ChargePile.type == pile_type)
+            .filter(ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY]))
+            .all()
+        ) 

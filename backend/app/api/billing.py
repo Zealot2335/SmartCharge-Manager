@@ -150,4 +150,83 @@ async def get_monthly_bills(
         "bills": bill_list
     }
     
-    return summary 
+    return summary
+
+@router.get("/bills/{session_id}", response_model=Dict[str, Any])
+async def get_bill_by_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """根据充电会话ID获取账单详情"""
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无效的会话ID"
+        )
+    
+    # 查询充电会话
+    from backend.app.db.models import ChargeSession, CarRequest
+    session = db.query(ChargeSession).filter(ChargeSession.id == session_id).first()
+    
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"未找到会话 {session_id}"
+        )
+    
+    # 验证用户权限
+    request = db.query(CarRequest).filter(CarRequest.id == session.request_id).first()
+    if not request or request.user_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问此会话"
+        )
+    
+    # 查询账单详情
+    detail = db.query(BillDetail).filter(BillDetail.session_id == session_id).first()
+    
+    if not detail:
+        # 如果未找到详单但会话存在，尝试生成账单
+        from backend.app.services.charging_service import ChargingService
+        detail = ChargingService.generate_bill(db, session)
+        if detail:
+            db.commit()
+    
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"未找到会话 {session_id} 对应的账单"
+        )
+    
+    # 获取充电桩信息
+    from backend.app.db.models import ChargePile
+    pile = db.query(ChargePile).filter(ChargePile.id == session.pile_id).first()
+    
+    # 获取账单主表
+    bill = db.query(BillMaster).filter(BillMaster.id == detail.bill_id).first()
+    
+    # 构建详单信息
+    detail_info = {
+        "detail_number": detail.detail_number,
+        "bill_date": bill.bill_date if bill else None,
+        "pile_code": detail.pile_code,
+        "pile_type": pile.type if pile else None,
+        "charged_kwh": detail.charged_kwh,
+        "charging_time": detail.charging_time,
+        "start_time": detail.start_time,
+        "end_time": detail.end_time,
+        "charge_fee": detail.charge_fee,
+        "service_fee": detail.service_fee,
+        "total_fee": detail.total_fee,
+        "request_info": {
+            "id": request.id,
+            "queue_number": request.queue_number,
+            "mode": request.mode,
+            "amount_kwh": request.amount_kwh,
+            "request_time": request.request_time
+        },
+        "session_status": session.status
+    }
+    
+    return detail_info 

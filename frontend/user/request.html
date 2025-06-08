@@ -85,6 +85,10 @@
                 return;
             }
             
+            // 先确保充电状态卡片和账单卡片默认隐藏
+            document.getElementById('charging-status-card').style.display = 'none';
+            document.getElementById('bill-card').style.display = 'none';
+            
             // 加载请求详情
             loadRequestDetails();
             
@@ -92,10 +96,12 @@
             const refreshBtn = document.getElementById('refresh-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', () => {
+                    // 首先重置状态卡片的显示
+                    document.getElementById('charging-status-card').style.display = 'none';
+                    document.getElementById('bill-card').style.display = 'none';
+                    
+                    // 然后重新加载所有数据
                     loadRequestDetails();
-                    if (sessionId) {
-                        loadChargingStatus();
-                    }
                 });
             }
             
@@ -172,23 +178,21 @@
                     cancelBtn.addEventListener('click', () => cancelRequest(requestId));
                 }
                 
-                // 根据状态处理进度更新
-                if (request.status === 'CHARGING') {
-                    document.getElementById('charging-status-card').style.display = 'block';
-                    startProgressUpdater();
-                } else {
-                    if (progressUpdater) clearInterval(progressUpdater); // 停止更新
-                    if (request.status === 'FINISHED') {
-                        document.getElementById('charging-status-card').style.display = 'block';
-                        document.getElementById('bill-card').style.display = 'block';
-                        loadChargingStatus();
-                        loadBillDetails();
-                    }
-                }
-                
                 // 保存会话ID
                 if (request.session_id) {
                     sessionId = request.session_id;
+                }
+                
+                // 根据状态处理进度更新和显示相应卡片
+                if (request.status === 'CHARGING') {
+                    document.getElementById('charging-status-card').style.display = 'block';
+                    loadChargingStatus(); // 立即加载一次
+                    startProgressUpdater();
+                } else if (request.status === 'FINISHED') {
+                    // 已完成充电的订单不需要显示充电状态
+                    document.getElementById('charging-status-card').style.display = 'none';
+                    document.getElementById('bill-card').style.display = 'block';
+                    loadBillDetails();
                 }
             } catch (error) {
                 console.error('加载请求详情失败:', error);
@@ -206,13 +210,29 @@
         // 加载充电状态
         async function loadChargingStatus() {
             const statusContainer = document.getElementById('charging-status');
-            
+            if (!statusContainer) return; // 防止DOM元素不存在
+
             try {
                 // 获取充电状态
                 const status = await API.charging.getChargeState(requestId);
                 
+                // 检查订单状态，如果已完成则隐藏充电状态卡片
+                if (status.status === 'FINISHED') {
+                    document.getElementById('charging-status-card').style.display = 'none';
+                    document.getElementById('bill-card').style.display = 'block';
+                    if (progressUpdater) {
+                        clearInterval(progressUpdater);
+                        progressUpdater = null;
+                    }
+                    loadBillDetails();
+                    return;
+                }
+                
+                // 确保充电状态卡片可见（针对充电中的订单）
+                document.getElementById('charging-status-card').style.display = 'block';
+                
                 // 检查是否完成
-                if (status.progress >= 100) {
+                if (status.charging_progress >= 100 || status.progress >= 100) {
                     if (progressUpdater) clearInterval(progressUpdater);
                     Utils.showNotification('充电已完成!', 'success');
                     
@@ -225,6 +245,7 @@
                 }
                 
                 // 显示充电状态
+                const progress = status.charging_progress || status.progress || 0;
                 let html = `
                     <div class="charging-info">
                         <div class="grid">
@@ -232,9 +253,9 @@
                                 <div class="info-group">
                                     <label>充电进度:</label>
                                     <div class="charge-progress">
-                                        <div class="charge-progress-bar" style="width: ${status.progress}%"></div>
+                                        <div class="charge-progress-bar" style="width: ${progress}%"></div>
                                     </div>
-                                    <span>${status.progress.toFixed(1)}%</span>
+                                    <span>${progress.toFixed(1)}%</span>
                                 </div>
                                 <div class="info-group">
                                     <label>已充电量:</label>
@@ -242,7 +263,7 @@
                                 </div>
                                 <div class="info-group">
                                     <label>剩余电量:</label>
-                                    <span>${Utils.formatKwh(status.remaining_kwh)}</span>
+                                    <span>${Utils.formatKwh(status.remaining_kwh || (status.amount_kwh - status.charged_kwh))}</span>
                                 </div>
                             </div>
                             <div class="col-6">
@@ -252,7 +273,7 @@
                                 </div>
                                 <div class="info-group">
                                     <label>预计剩余时间:</label>
-                                    <span>${Utils.formatMinutes(status.estimated_remaining_minutes)}</span>
+                                    <span>${Utils.formatMinutes(status.estimated_remaining_minutes || status.remaining_minutes)}</span>
                                 </div>
                                 <div class="info-group">
                                     <label>预计费用:</label>
@@ -273,8 +294,30 @@
         // 加载账单详情
         async function loadBillDetails() {
             const billContainer = document.getElementById('bill-details');
+            if (!billContainer) return; // 防止DOM元素不存在
             
             try {
+                // 确保有会话ID
+                if (!sessionId) {
+                    // 尝试重新获取请求详情以获取会话ID
+                    try {
+                        const request = await API.charging.getRequestDetails(requestId);
+                        if (request && request.session_id) {
+                            sessionId = request.session_id;
+                        } else {
+                            billContainer.innerHTML = '<p class="info">此充电记录暂无账单信息</p>';
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("获取充电请求详情失败:", e);
+                        billContainer.innerHTML = '<p class="error">无法获取会话ID，请稍后再试</p>';
+                        return;
+                    }
+                }
+                
+                // 确保账单卡片可见
+                document.getElementById('bill-card').style.display = 'block';
+                
                 // 获取账单详情
                 const bill = await API.billing.getBillDetails(sessionId);
                 
