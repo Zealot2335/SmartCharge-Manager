@@ -118,12 +118,14 @@
             // 更新欢迎区域
             updateWelcomeSection(isLoggedIn, isAdmin);
             
-            // 加载充电状态
-            loadChargingStatus();
-            
-            // 加载队列信息
-            loadQueueInfo('FAST');
-            loadQueueInfo('SLOW');
+            // 如果是管理员，加载详细的充电桩状态；否则，加载简化的队列信息
+            if (isAdmin) {
+                loadAdminPilesStatus();
+            } else {
+                // 对于普通用户，队列信息包含了充电状态的概览
+                loadQueueInfo('FAST');
+                loadQueueInfo('SLOW');
+            }
             
             // 绑定表单提交事件
             const quickChargeForm = document.getElementById('quick-charge-form');
@@ -165,8 +167,8 @@
             }
         }
         
-        // 加载充电状态
-        async function loadChargingStatus() {
+        // (管理员用)加载详细充电桩状态
+        async function loadAdminPilesStatus() {
             const statusContainer = document.getElementById('status-container');
             
             try {
@@ -203,7 +205,7 @@
             }
         }
         
-        // 加载队列信息
+        // (普通用户用)加载队列信息并更新充电状态卡片
         async function loadQueueInfo(mode) {
             const containerId = `${mode.toLowerCase()}-queue-container`;
             const container = document.getElementById(containerId);
@@ -212,10 +214,15 @@
                 // 获取队列信息
                 const queueInfo = await API.charging.getQueueInfo(mode);
                 
+                // 更新主充电状态卡片 (只在加载快充信息时执行一次，避免重复)
+                if (mode === 'FAST') {
+                    updateMainStatusCard(queueInfo, 'fast');
+                } else {
+                    updateMainStatusCard(queueInfo, 'slow');
+                }
+
                 // 显示队列信息
-                let html = '';
-                
-                html += `
+                let html = `
                     <div class="queue-summary">
                         <p>等候区: <span class="badge badge-primary">${queueInfo.waiting_count}辆</span></p>
                         <p>充电区: <span class="badge badge-success">${queueInfo.charging_count}辆</span></p>
@@ -242,6 +249,31 @@
                 console.error(`加载${mode}队列信息失败:`, error);
                 container.innerHTML = `<p class="error">加载${mode === 'FAST' ? '快充' : '慢充'}队列信息失败，请稍后再试</p>`;
             }
+        }
+
+        // 用于更新主状态卡的辅助函数
+        function updateMainStatusCard(queueInfo, type) {
+            const statusContainer = document.getElementById('status-container');
+            if(type === 'fast') {
+                statusContainer.innerHTML = ''; // 清空旧内容
+            }
+            
+            let html = '';
+            for (const [pileCode, pileQueue] of Object.entries(queueInfo.pile_queues)) {
+                 const status = pileQueue.charging > 0 ? 'CHARGING' : (pileQueue.queuing > 0 ? 'QUEUING' : 'AVAILABLE');
+                 const statusClass = `status-${status.toLowerCase()}`;
+                 html += `
+                    <div class="col-6" style="margin-bottom: 10px;">
+                        <div class="pile-item">
+                            <h3>${pileCode}号桩</h3>
+                            <div class="pile-status ${statusClass}">
+                                ${Utils.getPileStatusName(status)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            statusContainer.innerHTML += html;
         }
         
         // 处理快速充电表单提交

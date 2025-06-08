@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+import logging
 
 from backend.app.db.database import get_db
 from backend.app.db.models import User, CarRequest, ChargePile
@@ -15,6 +16,8 @@ from backend.app.services.billing import BillingService
 from backend.app.services.charging_service import ChargingService
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 @router.post("/request", response_model=ChargeRequest)
 async def create_charge_request(
@@ -48,7 +51,8 @@ async def create_charge_request(
     db.commit()
     db.refresh(db_request)
     
-    # 尝试立即调度
+    # 提交事务后再尝试调度
+    logger.info(f"New charge request {db_request.id} created, attempting to schedule.")
     ChargingScheduler.check_and_call_waiting_cars(db)
     
     return db_request
@@ -290,8 +294,8 @@ async def get_queue_info(
     # 查询等候区中该模式的车辆数量
     waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
     
-    # 查询充电区中该模式的车辆数量
-    piles = ChargingScheduler.get_available_piles(db, mode)
+    # 获取该模式下的所有充电桩
+    piles = ChargingScheduler.get_all_piles_by_mode(db, mode)
     pile_queues = {}
     total_charging = 0
     total_queuing = 0

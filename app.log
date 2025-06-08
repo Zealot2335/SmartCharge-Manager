@@ -89,3 +89,426 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-08 02:01:00,215 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_978qp0xqk ������
 2025-06-08 02:03:33,526 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_978qp0xqk �ѶϿ�����
 2025-06-08 02:03:33,896 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_8lcblxp35 ������
+2025-06-08 02:05:58,166 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_8lcblxp35 �ѶϿ�����
+2025-06-08 02:05:58,737 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 ������
+2025-06-08 02:10:13,119 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 �ѶϿ�����
+2025-06-08 02:10:13,226 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:10:16,123 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:10:16,126 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 ������
+2025-06-08 02:11:42,156 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 �ѶϿ�����
+2025-06-08 02:11:42,263 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:11:44,629 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:11:45,113 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 ������
+2025-06-08 02:11:49,292 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_98wfw2eb3 �ѶϿ�����
+2025-06-08 02:11:49,948 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_nknvuk97y ������
+2025-06-08 02:12:14,578 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_nknvuk97y �ѶϿ�����
+2025-06-08 02:12:14,684 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:12:17,049 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:12:17,109 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_nknvuk97y ������
+2025-06-08 02:12:20,150 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_nknvuk97y �ѶϿ�����
+2025-06-08 02:12:20,636 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 ������
+2025-06-08 02:17:15,074 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 �ѶϿ�����
+2025-06-08 02:17:15,182 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:17:17,468 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:17:18,110 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 ������
+2025-06-08 02:17:47,488 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 �ѶϿ�����
+2025-06-08 02:17:47,596 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:17:50,023 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:17:50,115 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 ������
+2025-06-08 02:18:07,650 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_sxxlsbig8 �ѶϿ�����
+2025-06-08 02:18:08,290 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc ������
+2025-06-08 02:22:47,934 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc �ѶϿ�����
+2025-06-08 02:22:48,043 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:22:51,091 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:22:51,115 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc ������
+2025-06-08 02:23:50,941 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc �ѶϿ�����
+2025-06-08 02:23:51,050 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:23:53,423 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:23:54,112 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc ������
+2025-06-08 02:23:59,528 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l0g7ppqmc �ѶϿ�����
+2025-06-08 02:24:00,221 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_ptd4a22d0 ������
+2025-06-08 02:24:23,018 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_ptd4a22d0 �ѶϿ�����
+2025-06-08 02:24:23,128 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:24:25,729 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:24:26,137 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_ptd4a22d0 ������
+2025-06-08 02:24:29,391 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_ptd4a22d0 �ѶϿ�����
+2025-06-08 02:24:29,812 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l3hxzvp4l ������
+2025-06-08 02:24:33,307 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_l3hxzvp4l �ѶϿ�����
+2025-06-08 02:24:33,802 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_v0eva5pna ������
+2025-06-08 02:24:34,832 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_v0eva5pna �ѶϿ�����
+2025-06-08 02:24:35,347 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_pzznf02qa ������
+2025-06-08 02:24:35,529 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_pzznf02qa �ѶϿ�����
+2025-06-08 02:24:36,031 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_wx6i8lsjg ������
+2025-06-08 02:24:36,195 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_wx6i8lsjg �ѶϿ�����
+2025-06-08 02:24:36,693 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_x9avmkj6d ������
+2025-06-08 02:24:49,661 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_x9avmkj6d �ѶϿ�����
+2025-06-08 02:24:50,176 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_xb4y71sep ������
+2025-06-08 02:24:50,498 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_xb4y71sep �ѶϿ�����
+2025-06-08 02:24:51,003 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_0sceoe0fu ������
+2025-06-08 02:24:52,248 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_0sceoe0fu �ѶϿ�����
+2025-06-08 02:24:52,582 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_0n9vlzmx5 ������
+2025-06-08 02:24:54,028 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_0n9vlzmx5 �ѶϿ�����
+2025-06-08 02:24:54,349 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_cxxbqse3e ������
+2025-06-08 02:25:41,857 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_cxxbqse3e �ѶϿ�����
+2025-06-08 02:25:41,966 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:25:44,304 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:25:45,116 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_cxxbqse3e ������
+2025-06-08 02:25:51,220 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_cxxbqse3e �ѶϿ�����
+2025-06-08 02:25:51,977 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_4y7frvwuk ������
+2025-06-08 02:29:26,416 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_4y7frvwuk �ѶϿ�����
+2025-06-08 02:29:26,523 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:39:23,424 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:39:45,649 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_2p2wsgjwb ������
+2025-06-08 02:39:53,344 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_2p2wsgjwb �ѶϿ�����
+2025-06-08 02:39:53,453 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:39:57,783 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:39:57,787 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_2p2wsgjwb ������
+2025-06-08 02:40:11,397 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_2p2wsgjwb �ѶϿ�����
+2025-06-08 02:40:12,112 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq ������
+2025-06-08 02:44:55,872 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq �ѶϿ�����
+2025-06-08 02:44:55,981 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:44:58,331 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:44:59,111 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq ������
+2025-06-08 02:45:28,295 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq �ѶϿ�����
+2025-06-08 02:45:28,404 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:45:32,697 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:45:32,701 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq ������
+2025-06-08 02:45:37,792 - backend.app.main - INFO - Ӧ������
+2025-06-08 02:47:15,134 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_7v8432opq �ѶϿ�����
+2025-06-08 02:47:15,834 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_9lq986ljx ������
+2025-06-08 02:50:30,563 - backend.app.services.websocket - INFO - �û� undefined �Ŀͻ��� client_9lq986ljx �ѶϿ�����
+2025-06-08 02:50:30,672 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:50:34,185 - backend.app.main - INFO - Ӧ�ùر�
+2025-06-08 02:50:35,265 - backend.app.main - INFO - 应用启动
+2025-06-08 02:50:35,269 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9lq986ljx 已连接
+2025-06-08 02:50:37,325 - backend.app.main - INFO - 应用启动
+2025-06-08 02:50:53,683 - backend.app.main - INFO - 应用启动
+2025-06-08 02:51:05,263 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9lq986ljx 已断开连接
+2025-06-08 02:51:05,373 - backend.app.main - INFO - 应用关闭
+2025-06-08 02:51:07,440 - backend.app.main - INFO - 应用关闭
+2025-06-08 02:51:08,112 - backend.app.main - INFO - 应用启动
+2025-06-08 02:51:08,117 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9lq986ljx 已连接
+2025-06-08 02:51:10,235 - backend.app.main - INFO - 应用启动
+2025-06-08 02:51:19,052 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9lq986ljx 已断开连接
+2025-06-08 02:51:19,766 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_0tbs642vm 已连接
+2025-06-08 02:51:32,779 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_0tbs642vm 已断开连接
+2025-06-08 02:51:33,098 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xtz28gfw6 已连接
+2025-06-08 02:51:43,943 - backend.app.api.charging - INFO - New charge request 4 created, attempting to schedule.
+2025-06-08 02:51:43,972 - backend.app.services.scheduler - INFO - Optimal pile for request 4 is 26. Assigning to pile.
+2025-06-08 02:51:44,001 - backend.app.services.scheduler - INFO - Successfully assigned request 4 to pile F01 (ID: 26) at position 1
+2025-06-08 02:51:44,006 - backend.app.services.scheduler - INFO - Successfully assigned request 4 to pile 26.
+2025-06-08 02:51:44,006 - backend.app.services.scheduler - INFO - Scheduled car request 4 for FAST charging.
+2025-06-08 02:51:57,634 - backend.app.main - INFO - 应用关闭
+2025-06-08 02:53:29,203 - backend.app.main - INFO - 应用启动
+2025-06-08 02:54:57,728 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xtz28gfw6 已断开连接
+2025-06-08 02:54:57,908 - backend.app.main - INFO - 应用关闭
+2025-06-08 02:55:00,291 - backend.app.main - INFO - 应用启动
+2025-06-08 02:55:01,336 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8xcevwgiv 已连接
+2025-06-08 02:55:03,809 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8xcevwgiv 已断开连接
+2025-06-08 02:55:04,145 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6bqhaf8jr 已连接
+2025-06-08 02:55:34,261 - backend.app.main - INFO - 应用关闭
+2025-06-08 02:55:36,469 - backend.app.main - INFO - 应用启动
+2025-06-08 02:56:35,575 - backend.app.main - INFO - 应用启动
+2025-06-08 02:56:35,645 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6bqhaf8jr 已连接
+2025-06-08 02:57:18,554 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6bqhaf8jr 已断开连接
+2025-06-08 02:57:19,021 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_grsfkvj4d 已连接
+2025-06-08 02:57:21,824 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_grsfkvj4d 已断开连接
+2025-06-08 02:57:22,178 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2iizb2u8n 已连接
+2025-06-08 02:57:27,252 - backend.app.api.charging - INFO - New charge request 5 created, attempting to schedule.
+2025-06-08 02:57:27,289 - backend.app.services.scheduler - INFO - Optimal pile for request 5 is 29. Assigning to pile.
+2025-06-08 02:57:27,319 - backend.app.services.scheduler - INFO - Request 5 is at the front of the queue for an available pile. Starting charging immediately.
+2025-06-08 02:57:27,330 - backend.app.services.scheduler - INFO - Successfully assigned request 5 to pile S02 (ID: 29) at position 0
+2025-06-08 02:57:27,333 - backend.app.services.scheduler - INFO - Successfully assigned request 5 to pile 29.
+2025-06-08 02:57:27,333 - backend.app.services.scheduler - INFO - Scheduled car request 5 for SLOW charging.
+2025-06-08 02:57:39,733 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2iizb2u8n 已断开连接
+2025-06-08 02:57:40,078 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_lf9lrch8o 已连接
+2025-06-08 02:57:42,114 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_lf9lrch8o 已断开连接
+2025-06-08 02:57:42,671 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_rtgivzomo 已连接
+2025-06-08 02:57:45,491 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_rtgivzomo 已断开连接
+2025-06-08 02:57:45,811 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kmrtwulxb 已连接
+2025-06-08 02:57:53,765 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kmrtwulxb 已断开连接
+2025-06-08 02:57:54,295 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_jzr7lje8u 已连接
+2025-06-08 02:57:59,448 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_jzr7lje8u 已断开连接
+2025-06-08 02:57:59,765 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wiycedo37 已连接
+2025-06-08 02:58:02,815 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wiycedo37 已断开连接
+2025-06-08 02:58:03,366 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2ta2dh1de 已连接
+2025-06-08 02:58:10,533 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2ta2dh1de 已断开连接
+2025-06-08 02:58:10,850 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cmukb43cp 已连接
+2025-06-08 02:58:15,909 - backend.app.api.charging - INFO - New charge request 6 created, attempting to schedule.
+2025-06-08 02:58:15,928 - backend.app.services.scheduler - INFO - Optimal pile for request 6 is 27. Assigning to pile.
+2025-06-08 02:58:15,944 - backend.app.services.scheduler - INFO - Request 6 is at the front of the queue for an available pile. Starting charging immediately.
+2025-06-08 02:58:15,956 - backend.app.services.scheduler - INFO - Successfully assigned request 6 to pile F02 (ID: 27) at position 0
+2025-06-08 02:58:15,959 - backend.app.services.scheduler - INFO - Successfully assigned request 6 to pile 27.
+2025-06-08 02:58:15,960 - backend.app.services.scheduler - INFO - Scheduled car request 6 for FAST charging.
+2025-06-08 02:58:17,102 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cmukb43cp 已断开连接
+2025-06-08 02:58:17,410 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_sedc7fj50 已连接
+2025-06-08 02:58:19,432 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_sedc7fj50 已断开连接
+2025-06-08 02:58:19,940 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wodik5b6h 已连接
+2025-06-08 02:58:23,265 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wodik5b6h 已断开连接
+2025-06-08 02:58:23,584 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wmtivislj 已连接
+2025-06-08 02:58:26,772 - backend.app.api.charging - INFO - New charge request 7 created, attempting to schedule.
+2025-06-08 02:58:26,795 - backend.app.services.scheduler - INFO - Optimal pile for request 7 is 26. Assigning to pile.
+2025-06-08 02:58:26,813 - backend.app.services.scheduler - INFO - Successfully assigned request 7 to pile F01 (ID: 26) at position 0
+2025-06-08 02:58:26,817 - backend.app.services.scheduler - INFO - Successfully assigned request 7 to pile 26.
+2025-06-08 02:58:26,818 - backend.app.services.scheduler - INFO - Scheduled car request 7 for FAST charging.
+2025-06-08 02:58:28,012 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_wmtivislj 已断开连接
+2025-06-08 02:58:28,335 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_w6z9ng9i6 已连接
+2025-06-08 02:58:28,686 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_w6z9ng9i6 已断开连接
+2025-06-08 02:58:29,165 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_29z3h7v5p 已连接
+2025-06-08 02:58:34,953 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_29z3h7v5p 已断开连接
+2025-06-08 02:58:35,517 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8f33d763l 已连接
+2025-06-08 02:58:37,971 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8f33d763l 已断开连接
+2025-06-08 02:58:38,280 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1rq5w9yf9 已连接
+2025-06-08 02:58:42,397 - backend.app.api.charging - INFO - New charge request 8 created, attempting to schedule.
+2025-06-08 02:58:42,423 - backend.app.services.scheduler - INFO - Optimal pile for request 8 is 27. Assigning to pile.
+2025-06-08 02:58:42,442 - backend.app.services.scheduler - INFO - Successfully assigned request 8 to pile F02 (ID: 27) at position 1
+2025-06-08 02:58:42,444 - backend.app.services.scheduler - INFO - Successfully assigned request 8 to pile 27.
+2025-06-08 02:58:42,444 - backend.app.services.scheduler - INFO - Scheduled car request 8 for FAST charging.
+2025-06-08 02:58:43,674 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1rq5w9yf9 已断开连接
+2025-06-08 02:58:44,192 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_0gnjzyxzb 已连接
+2025-06-08 02:58:44,835 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_0gnjzyxzb 已断开连接
+2025-06-08 02:58:45,161 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_bh23r075b 已连接
+2025-06-08 02:58:45,403 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_bh23r075b 已断开连接
+2025-06-08 02:58:45,832 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_uqsta3z8h 已连接
+2025-06-08 02:58:49,558 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_uqsta3z8h 已断开连接
+2025-06-08 02:58:49,879 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_eb8trxrvb 已连接
+2025-06-08 02:58:54,558 - backend.app.api.charging - INFO - New charge request 9 created, attempting to schedule.
+2025-06-08 02:58:54,587 - backend.app.services.scheduler - INFO - Optimal pile for request 9 is 28. Assigning to pile.
+2025-06-08 02:58:54,604 - backend.app.services.scheduler - INFO - Request 9 is at the front of the queue for an available pile. Starting charging immediately.
+2025-06-08 02:58:54,615 - backend.app.services.scheduler - INFO - Successfully assigned request 9 to pile S01 (ID: 28) at position 0
+2025-06-08 02:58:54,617 - backend.app.services.scheduler - INFO - Successfully assigned request 9 to pile 28.
+2025-06-08 02:58:54,617 - backend.app.services.scheduler - INFO - Scheduled car request 9 for SLOW charging.
+2025-06-08 02:59:03,449 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_eb8trxrvb 已断开连接
+2025-06-08 02:59:03,882 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_q54awsutp 已连接
+2025-06-08 02:59:09,299 - backend.app.api.charging - INFO - New charge request 10 created, attempting to schedule.
+2025-06-08 02:59:09,332 - backend.app.services.scheduler - INFO - Optimal pile for request 10 is 30. Assigning to pile.
+2025-06-08 02:59:09,354 - backend.app.services.scheduler - INFO - Request 10 is at the front of the queue for an available pile. Starting charging immediately.
+2025-06-08 02:59:09,366 - backend.app.services.scheduler - INFO - Successfully assigned request 10 to pile S03 (ID: 30) at position 0
+2025-06-08 02:59:09,368 - backend.app.services.scheduler - INFO - Successfully assigned request 10 to pile 30.
+2025-06-08 02:59:09,369 - backend.app.services.scheduler - INFO - Scheduled car request 10 for SLOW charging.
+2025-06-08 02:59:11,425 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_q54awsutp 已断开连接
+2025-06-08 02:59:11,749 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xyl6bakdm 已连接
+2025-06-08 02:59:13,626 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_xyl6bakdm 已断开连接
+2025-06-08 02:59:14,040 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_t4ek2ar1f 已连接
+2025-06-08 02:59:16,979 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_t4ek2ar1f 已断开连接
+2025-06-08 02:59:17,328 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2xgex4ylk 已连接
+2025-06-08 02:59:21,283 - backend.app.api.charging - INFO - New charge request 11 created, attempting to schedule.
+2025-06-08 02:59:21,320 - backend.app.services.scheduler - INFO - Optimal pile for request 11 is 28. Assigning to pile.
+2025-06-08 02:59:21,334 - backend.app.services.scheduler - INFO - Successfully assigned request 11 to pile S01 (ID: 28) at position 1
+2025-06-08 02:59:21,337 - backend.app.services.scheduler - INFO - Successfully assigned request 11 to pile 28.
+2025-06-08 02:59:21,337 - backend.app.services.scheduler - INFO - Scheduled car request 11 for SLOW charging.
+2025-06-08 02:59:22,701 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2xgex4ylk 已断开连接
+2025-06-08 02:59:23,234 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_vvlu8qrjk 已连接
+2025-06-08 02:59:28,801 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_vvlu8qrjk 已断开连接
+2025-06-08 02:59:29,125 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cqj85fq8b 已连接
+2025-06-08 02:59:30,799 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cqj85fq8b 已断开连接
+2025-06-08 02:59:31,339 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yjl6hy070 已连接
+2025-06-08 03:04:59,753 - backend.app.main - INFO - 应用启动
+2025-06-08 03:05:05,933 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2qso93b2i 已连接
+2025-06-08 03:05:11,143 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_2qso93b2i 已断开连接
+2025-06-08 03:05:11,703 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_3kpl4mx72 已连接
+2025-06-08 03:08:32,102 - backend.app.main - INFO - 应用启动
+2025-06-08 03:08:35,889 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_znp8mdmbq 已连接
+2025-06-08 03:08:59,193 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_znp8mdmbq 已断开连接
+2025-06-08 03:08:59,506 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_oho8o02vj 已连接
+2025-06-08 03:09:02,980 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_oho8o02vj 已断开连接
+2025-06-08 03:09:03,287 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ai9v41g42 已连接
+2025-06-08 03:09:04,653 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ai9v41g42 已断开连接
+2025-06-08 03:09:04,964 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_5cs95jqed 已连接
+2025-06-08 03:09:22,821 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_5cs95jqed 已断开连接
+2025-06-08 03:09:23,109 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ebjvg0nso 已连接
+2025-06-08 03:10:29,177 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ebjvg0nso 已断开连接
+2025-06-08 03:10:29,697 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1jljiz50e 已连接
+2025-06-08 03:10:31,040 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1jljiz50e 已断开连接
+2025-06-08 03:10:31,534 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dld475y66 已连接
+2025-06-08 03:10:31,971 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dld475y66 已断开连接
+2025-06-08 03:10:32,391 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yd32r68b6 已连接
+2025-06-08 03:10:50,725 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yd32r68b6 已断开连接
+2025-06-08 03:10:51,578 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dh5ii0rgw 已连接
+2025-06-08 03:11:15,005 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dh5ii0rgw 已断开连接
+2025-06-08 03:11:26,329 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_zr3ylmsa3 已连接
+2025-06-08 03:14:16,491 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_zr3ylmsa3 已断开连接
+2025-06-08 03:14:17,264 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_76u481s9r 已连接
+2025-06-08 03:16:57,133 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 03:16:57,134 - backend.app.main - INFO - 应用启动
+2025-06-08 03:17:23,084 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_76u481s9r 已断开连接
+2025-06-08 03:17:23,192 - backend.app.main - INFO - 应用关闭
+2025-06-08 03:17:25,965 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 03:17:25,966 - backend.app.main - INFO - 应用启动
+2025-06-08 03:17:25,980 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_q0a9giijb 已连接
+2025-06-08 03:17:33,679 - backend.app.api.charging - INFO - New charge request 12 created, attempting to schedule.
+2025-06-08 03:17:33,719 - backend.app.services.scheduler - INFO - Optimal pile for request 12 is 26. Assigning to pile.
+2025-06-08 03:17:33,744 - backend.app.services.scheduler - INFO - Successfully assigned request 12 to pile F01 (ID: 26) at position 0
+2025-06-08 03:17:33,747 - backend.app.services.scheduler - INFO - Successfully assigned request 12 to pile 26.
+2025-06-08 03:17:33,747 - backend.app.services.scheduler - INFO - Scheduled car request 12 for FAST charging.
+2025-06-08 03:17:38,404 - backend.app.main - INFO - 应用关闭
+2025-06-08 03:17:53,383 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 03:17:53,384 - backend.app.main - INFO - 应用启动
+2025-06-08 03:18:14,115 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_q0a9giijb 已断开连接
+2025-06-08 03:18:14,737 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_whd4d9drk 已连接
+2025-06-08 03:18:21,845 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_whd4d9drk 已断开连接
+2025-06-08 03:18:22,194 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_d586r3c8n 已连接
+2025-06-08 03:18:23,109 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_d586r3c8n 已断开连接
+2025-06-08 03:18:23,614 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4geaynn8a 已连接
+2025-06-08 03:18:25,274 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4geaynn8a 已断开连接
+2025-06-08 03:18:25,844 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_llouay704 已连接
+2025-06-08 03:18:35,262 - backend.app.main - INFO - 应用关闭
+2025-06-08 03:18:53,240 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_llouay704 已断开连接
+2025-06-08 03:18:53,546 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_aqyfu7kjk 已连接
+2025-06-08 03:18:54,937 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_aqyfu7kjk 已断开连接
+2025-06-08 03:18:55,241 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gfi197hje 已连接
+2025-06-08 03:19:02,559 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gfi197hje 已断开连接
+2025-06-08 03:19:02,667 - backend.app.main - INFO - 应用关闭
+2025-06-08 03:19:07,536 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 03:19:07,536 - backend.app.main - INFO - 应用启动
+2025-06-08 03:19:11,450 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gfi197hje 已连接
+2025-06-08 03:19:12,923 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gfi197hje 已断开连接
+2025-06-08 03:19:13,363 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_qlfq1dznb 已连接
+2025-06-08 03:19:15,658 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_qlfq1dznb 已断开连接
+2025-06-08 03:19:15,974 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_3s8gm1tzv 已连接
+2025-06-08 03:19:30,042 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_3s8gm1tzv 已断开连接
+2025-06-08 03:19:30,153 - backend.app.main - INFO - 应用关闭
+2025-06-08 11:29:15,049 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 11:29:15,050 - backend.app.main - INFO - 应用启动
+2025-06-08 11:29:27,295 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1x7iqg5w5 已连接
+2025-06-08 11:29:30,705 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_1x7iqg5w5 已断开连接
+2025-06-08 11:29:31,047 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_oiaptztg0 已连接
+2025-06-08 11:31:12,639 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_oiaptztg0 已断开连接
+2025-06-08 11:31:13,495 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_sc1c5s97n 已连接
+2025-06-08 11:34:05,136 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_sc1c5s97n 已断开连接
+2025-06-08 11:34:05,965 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_hha7f0qcy 已连接
+2025-06-08 11:34:14,746 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_hha7f0qcy 已断开连接
+2025-06-08 11:34:15,555 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nyhaxo8n2 已连接
+2025-06-08 11:34:54,822 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nyhaxo8n2 已断开连接
+2025-06-08 11:34:54,930 - backend.app.main - INFO - 应用关闭
+2025-06-08 11:35:00,048 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 11:35:00,049 - backend.app.main - INFO - 应用启动
+2025-06-08 11:35:00,141 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nyhaxo8n2 已连接
+2025-06-08 11:35:08,117 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nyhaxo8n2 已断开连接
+2025-06-08 11:35:08,936 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7dv1lq2t1 已连接
+2025-06-08 11:38:42,724 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7dv1lq2t1 已断开连接
+2025-06-08 11:38:43,528 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pph06hqwq 已连接
+2025-06-08 11:39:05,700 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_pph06hqwq 已断开连接
+2025-06-08 11:39:06,014 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_bkjf0jsqf 已连接
+2025-06-08 11:39:34,823 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_bkjf0jsqf 已断开连接
+2025-06-08 11:39:35,113 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_i5s5q9b3e 已连接
+2025-06-08 11:39:41,849 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_i5s5q9b3e 已断开连接
+2025-06-08 11:39:42,169 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8qehfr7dx 已连接
+2025-06-08 11:39:43,039 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_8qehfr7dx 已断开连接
+2025-06-08 11:39:44,363 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9herjevkf 已连接
+2025-06-08 11:39:45,984 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_9herjevkf 已断开连接
+2025-06-08 11:39:46,336 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已连接
+2025-06-08 11:42:49,340 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已断开连接
+2025-06-08 11:42:49,449 - backend.app.main - INFO - 应用关闭
+2025-06-08 11:42:53,816 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 11:42:53,816 - backend.app.main - INFO - 应用启动
+2025-06-08 11:42:53,820 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已连接
+2025-06-08 11:43:13,953 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已断开连接
+2025-06-08 11:43:14,058 - backend.app.main - INFO - 应用关闭
+2025-06-08 11:43:16,428 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 11:43:16,429 - backend.app.main - INFO - 应用启动
+2025-06-08 11:43:17,102 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已连接
+2025-06-08 11:43:23,250 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7k2o0hshq 已断开连接
+2025-06-08 11:43:23,700 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nxx2qjom9 已连接
+2025-06-08 11:43:31,142 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_nxx2qjom9 已断开连接
+2025-06-08 11:43:31,492 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_3w45ghoby 已连接
+2025-06-08 11:43:49,865 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_3w45ghoby 已断开连接
+2025-06-08 11:43:50,208 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_g12fe0m1v 已连接
+2025-06-08 11:43:51,487 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_g12fe0m1v 已断开连接
+2025-06-08 11:43:58,516 - backend.app.services.websocket - INFO - 管理员客户端 client_z9zqsxrhz 已连接
+2025-06-08 11:44:25,726 - backend.app.services.websocket - INFO - 管理员客户端 client_z9zqsxrhz 已断开连接
+2025-06-08 11:44:28,173 - backend.app.services.websocket - INFO - 管理员客户端 client_dk88veuqj 已连接
+2025-06-08 11:45:11,838 - backend.app.services.websocket - INFO - 管理员客户端 client_dk88veuqj 已断开连接
+2025-06-08 11:45:17,315 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_r4s0pmldp 已连接
+2025-06-08 11:46:59,214 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_r4s0pmldp 已断开连接
+2025-06-08 11:46:59,747 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cq4rlu22r 已连接
+2025-06-08 11:47:03,946 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_cq4rlu22r 已断开连接
+2025-06-08 11:47:04,262 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kgx844xqx 已连接
+2025-06-08 11:55:08,371 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 11:55:08,371 - backend.app.main - INFO - 应用启动
+2025-06-08 12:00:03,701 - backend.app.main - INFO - 应用关闭
+2025-06-08 12:00:07,938 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 12:00:07,938 - backend.app.main - INFO - 应用启动
+2025-06-08 12:07:01,681 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge_test_2024
+2025-06-08 12:07:01,681 - backend.app.main - INFO - 应用启动
+2025-06-08 12:07:13,379 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kgx844xqx 已断开连接
+2025-06-08 12:07:13,480 - backend.app.main - INFO - 应用关闭
+2025-06-08 12:07:22,109 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kgx844xqx 已连接
+2025-06-08 12:07:25,207 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_kgx844xqx 已断开连接
+2025-06-08 12:07:25,880 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_i01g0mylz 已连接
+2025-06-08 12:07:26,203 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_i01g0mylz 已断开连接
+2025-06-08 12:07:41,212 - backend.app.main - INFO - 应用关闭
+2025-06-08 12:11:32,721 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge_test_2024
+2025-06-08 12:11:32,722 - backend.app.main - INFO - 应用启动
+2025-06-08 12:15:18,420 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge_test_2024
+2025-06-08 12:15:18,420 - backend.app.main - INFO - 应用启动
+2025-06-08 12:18:06,501 - backend.app.main - INFO - 应用关闭
+2025-06-08 12:19:04,828 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge_test_2024
+2025-06-08 12:19:04,828 - backend.app.main - INFO - 应用启动
+2025-06-08 12:19:46,390 - backend.app.main - INFO - 应用关闭
+2025-06-08 13:36:20,312 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge_test_2024
+2025-06-08 13:36:20,313 - backend.app.main - INFO - 应用启动
+2025-06-08 13:36:44,218 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6xdvisg71 已连接
+2025-06-08 13:36:51,317 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6xdvisg71 已断开连接
+2025-06-08 13:36:51,625 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6ujsesmmb 已连接
+2025-06-08 13:36:58,428 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_6ujsesmmb 已断开连接
+2025-06-08 13:36:58,739 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4aebn04tz 已连接
+2025-06-08 13:37:13,998 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4aebn04tz 已断开连接
+2025-06-08 13:37:14,315 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_88xnwe720 已连接
+2025-06-08 13:39:42,864 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 13:39:42,864 - backend.app.main - INFO - 应用启动
+2025-06-08 13:39:55,346 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4yo6l1357 已连接
+2025-06-08 13:39:55,518 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4yo6l1357 已断开连接
+2025-06-08 13:41:29,367 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 13:41:29,368 - backend.app.main - INFO - 应用启动
+2025-06-08 13:41:38,453 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7rg30y5ul 已连接
+2025-06-08 13:41:43,954 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7rg30y5ul 已断开连接
+2025-06-08 13:41:44,270 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_noq14n3r7 已连接
+2025-06-08 13:41:47,709 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_noq14n3r7 已断开连接
+2025-06-08 13:42:01,239 - backend.app.services.websocket - INFO - 管理员客户端 client_97taabd0x 已连接
+2025-06-08 13:42:09,601 - backend.app.services.websocket - INFO - 管理员客户端 client_97taabd0x 已断开连接
+2025-06-08 13:42:11,024 - backend.app.services.websocket - INFO - 管理员客户端 client_gxmfktpj8 已连接
+2025-06-08 13:44:43,506 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 13:44:43,506 - backend.app.main - INFO - 应用启动
+2025-06-08 13:44:47,929 - backend.app.services.websocket - INFO - 管理员客户端 client_6vkjilg2v 已连接
+2025-06-08 13:44:53,633 - backend.app.services.websocket - INFO - 管理员客户端 client_6vkjilg2v 已断开连接
+2025-06-08 13:45:02,461 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4u37aqabs 已连接
+2025-06-08 13:45:07,354 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_4u37aqabs 已断开连接
+2025-06-08 13:45:07,672 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yu7ui8w9r 已连接
+2025-06-08 13:45:12,488 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_yu7ui8w9r 已断开连接
+2025-06-08 13:45:12,816 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_26o4ngeoa 已连接
+2025-06-08 13:45:15,991 - backend.app.api.charging - INFO - New charge request 1 created, attempting to schedule.
+2025-06-08 13:45:19,118 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_26o4ngeoa 已断开连接
+2025-06-08 13:45:19,457 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7zsefwpwo 已连接
+2025-06-08 13:45:27,265 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_7zsefwpwo 已断开连接
+2025-06-08 13:45:27,591 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ez6uw2ecx 已连接
+2025-06-08 13:45:29,873 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_ez6uw2ecx 已断开连接
+2025-06-08 13:45:30,231 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dgro91o2y 已连接
+2025-06-08 13:45:32,767 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_dgro91o2y 已断开连接
+2025-06-08 13:45:42,002 - backend.app.services.websocket - INFO - 管理员客户端 client_p19bgsx5g 已连接
+2025-06-08 13:45:52,568 - backend.app.services.websocket - INFO - 管理员客户端 client_p19bgsx5g 已断开连接
+2025-06-08 13:45:52,936 - backend.app.services.websocket - INFO - 管理员客户端 client_g46wsdnky 已连接
+2025-06-08 13:46:26,989 - backend.app.services.websocket - INFO - 管理员客户端 client_g46wsdnky 已断开连接
+2025-06-08 13:46:35,065 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_syklbx0nl 已连接
+2025-06-08 13:46:37,070 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_syklbx0nl 已断开连接
+2025-06-08 13:46:37,389 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_b8flfsics 已连接
+2025-06-08 13:53:19,417 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 13:53:19,417 - backend.app.main - INFO - 应用启动
+2025-06-08 13:53:27,051 - backend.app.services.websocket - INFO - 管理员客户端 client_lozmbw8wj 已连接
+2025-06-08 13:58:34,243 - backend.app.services.websocket - INFO - 管理员客户端 client_lozmbw8wj 已断开连接
+2025-06-08 13:58:34,787 - backend.app.services.websocket - INFO - 管理员客户端 client_001iw9c32 已连接
+2025-06-08 13:58:37,249 - backend.app.services.websocket - INFO - 管理员客户端 client_001iw9c32 已断开连接
+2025-06-08 13:58:37,823 - backend.app.services.websocket - INFO - 管理员客户端 client_65ritykbe 已连接
+2025-06-08 13:58:46,884 - backend.app.services.websocket - INFO - 管理员客户端 client_65ritykbe 已断开连接
+2025-06-08 13:59:00,556 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_enptehtdh 已连接
+2025-06-08 13:59:02,499 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_enptehtdh 已断开连接
+2025-06-08 13:59:02,812 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gegb8grem 已连接
+2025-06-08 13:59:05,498 - backend.app.services.websocket - INFO - 用户 undefined 的客户端 client_gegb8grem 已断开连接
+2025-06-08 13:59:22,736 - backend.app.services.websocket - INFO - 管理员客户端 client_15th4dq0u 已连接
+2025-06-08 14:00:38,960 - backend.app.services.websocket - INFO - 管理员客户端 client_15th4dq0u 已断开连接
+2025-06-08 14:00:39,066 - backend.app.main - INFO - 应用关闭
+2025-06-08 14:01:27,587 - backend.app.main - INFO - 应用启动，连接到数据库: mysql+pymysql://root:20031216cyh@localhost:3306/smart_charge
+2025-06-08 14:01:27,588 - backend.app.main - INFO - 应用启动
+2025-06-08 14:01:39,240 - backend.app.services.websocket - INFO - 管理员客户端 client_7pagjvm7q 已连接
+2025-06-08 14:01:47,431 - backend.app.services.websocket - INFO - 管理员客户端 client_7pagjvm7q 已断开连接
+2025-06-08 14:01:47,539 - backend.app.main - INFO - 应用关闭

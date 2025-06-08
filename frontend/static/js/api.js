@@ -288,17 +288,25 @@ const admin = {
      * @returns {Promise} 充电桩列表
      */
     getPiles: () => {
-        return request('/admin/piles', 'GET');
+        return request('/admin/pile', 'GET');
     },
     
     /**
-     * 更新充电桩状态
-     * @param {number} pileId - 充电桩ID
-     * @param {Object} updateData - 更新数据
+     * 启动充电桩
+     * @param {string} pileCode - 充电桩编号
      * @returns {Promise} 更新结果
      */
-    updatePileStatus: (pileId, updateData) => {
-        return request(`/admin/piles/${pileId}`, 'PATCH', updateData);
+    powerOnPile: (pileCode) => {
+        return request(`/admin/pile/${pileCode}/poweron`, 'POST');
+    },
+    
+    /**
+     * 关闭充电桩
+     * @param {string} pileCode - 充电桩编号
+     * @returns {Promise} 更新结果
+     */
+    shutdownPile: (pileCode) => {
+        return request(`/admin/pile/${pileCode}/shutdown`, 'POST');
     },
     
     /**

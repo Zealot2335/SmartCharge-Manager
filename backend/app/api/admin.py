@@ -21,7 +21,7 @@ async def get_all_piles(
     current_user: User = Depends(get_admin_user)
 ):
     """获取所有充电桩状态"""
-    piles = db.query(ChargePile).all()
+    piles = db.query(ChargePile).order_by(ChargePile.id).all()
     
     result = []
     for pile in piles:

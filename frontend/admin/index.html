@@ -252,88 +252,66 @@
                     </div>
                 `;
                 
+                // 渲染HTML
                 container.innerHTML = html;
-                
-                // 绑定操作按钮
-                bindPileActions();
             } catch (error) {
                 console.error('加载充电桩状态失败:', error);
-                container.innerHTML = '<p class="error">加载充电桩状态失败，请稍后再试</p>';
+                container.innerHTML = '<p class="error-message">加载充电桩状态失败，请稍后重试。</p>';
             }
         }
         
-        // 创建充电桩卡片
+        // 创建充电桩卡片HTML
         function createPileCard(pile) {
-            const statusClass = `status-${pile.status.toLowerCase()}`;
+            const statusName = Utils.getPileStatusName(pile.status);
+            const statusClass = pile.status.toLowerCase();
+            
+            let buttons = '';
+            if (pile.status === 'OFFLINE') {
+                buttons = `<button class="btn btn-sm" onclick="handlePowerOn('${pile.code}')">启用</button>`;
+            } else if (pile.status === 'AVAILABLE' || pile.status === 'BUSY') {
+                buttons = `<button class="btn btn-sm btn-danger" onclick="handleShutdown('${pile.code}')">禁用</button>`;
+            }
+
             return `
-                <div class="pile-card ${statusClass}" data-id="${pile.id}">
+                <div class="pile-card" id="pile-card-${pile.code}">
                     <div class="pile-header">
-                        <h4>${pile.code}号桩</h4>
-                        <span class="pile-status">${Utils.getPileStatusName(pile.status)}</span>
+                        <span class="pile-code">${pile.code}号桩</span>
+                        <span class="status-label ${statusClass}">${statusName}</span>
                     </div>
                     <div class="pile-body">
                         <p>功率: ${pile.power} kW</p>
-                        <p>累计: ${pile.total_charge_count}次 / ${Utils.formatKwh(pile.total_charge_amount)}</p>
+                        <p>累计: ${Utils.formatKwh(pile.total_charge_amount)} / ${Utils.formatMinutes(pile.total_charge_time)}</p>
                     </div>
                     <div class="pile-footer">
-                        <button class="btn btn-sm view-pile-btn" data-id="${pile.id}">详情</button>
-                        ${pile.status !== 'BUSY' ? `
-                            <button class="btn btn-sm ${pile.status === 'AVAILABLE' ? 'btn-danger' : 'btn-success'} toggle-status-btn" 
-                                data-id="${pile.id}" 
-                                data-status="${pile.status}">
-                                ${pile.status === 'AVAILABLE' ? '停用' : '启用'}
-                            </button>
-                        ` : ''}
+                        <button class="btn btn-sm btn-secondary" onclick="showPileDetails('${pile.code}')">详情</button>
+                        ${buttons}
                     </div>
                 </div>
             `;
         }
-        
-        // 绑定充电桩操作按钮
-        function bindPileActions() {
-            // 查看详情按钮
-            const viewBtns = document.querySelectorAll('.view-pile-btn');
-            viewBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const pileId = btn.getAttribute('data-id');
-                    window.location.href = `/admin/pile.html?id=${pileId}`;
-                });
-            });
-            
-            // 切换状态按钮
-            const toggleBtns = document.querySelectorAll('.toggle-status-btn');
-            toggleBtns.forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const pileId = btn.getAttribute('data-id');
-                    const currentStatus = btn.getAttribute('data-status');
-                    
-                    // 确认操作
-                    if (!confirm(`确定要${currentStatus === 'AVAILABLE' ? '停用' : '启用'}该充电桩吗？`)) {
-                        return;
-                    }
-                    
-                    try {
-                        // 禁用按钮
-                        btn.disabled = true;
-                        
-                        // 更新状态
-                        const newStatus = currentStatus === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE';
-                        await API.admin.updatePileStatus(pileId, { status: newStatus });
-                        
-                        // 成功提示
-                        Utils.showNotification(`充电桩状态已更新为${Utils.getPileStatusName(newStatus)}`, 'success');
-                        
-                        // 重新加载充电桩状态
-                        loadPileStatus();
-                    } catch (error) {
-                        console.error('更新充电桩状态失败:', error);
-                        Utils.showNotification('更新充电桩状态失败: ' + error.message, 'danger');
-                        
-                        // 启用按钮
-                        btn.disabled = false;
-                    }
-                });
-            });
+
+        // 启用充电桩
+        async function handlePowerOn(pileCode) {
+            try {
+                await API.admin.powerOnPile(pileCode);
+                Utils.showNotification(`充电桩 ${pileCode} 已启用`, 'success');
+                loadPileStatus(); // 重新加载状态
+                loadQueueStatus();
+            } catch (error) {
+                Utils.showNotification(`启用失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 禁用充电桩
+        async function handleShutdown(pileCode) {
+            try {
+                await API.admin.shutdownPile(pileCode);
+                Utils.showNotification(`充电桩 ${pileCode} 已禁用`, 'success');
+                loadPileStatus(); // 重新加载状态
+                loadQueueStatus();
+            } catch (error) {
+                Utils.showNotification(`禁用失败: ${error.message}`, 'error');
+            }
         }
         
         // 加载队列状态

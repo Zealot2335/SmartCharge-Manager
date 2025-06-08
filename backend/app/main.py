@@ -11,7 +11,7 @@ from pathlib import Path
 from backend.app.api import auth, charging, billing, admin
 from backend.app.services.websocket import setup_websocket
 from backend.app.db.database import Base, engine
-from backend.app.core.config import get_system_config
+from backend.app.core.config import get_system_config, get_db_url
 
 # 配置日志
 logging.basicConfig(
@@ -19,7 +19,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("app.log")
+        logging.FileHandler("app.log", encoding="utf-8")
     ]
 )
 
@@ -69,6 +69,8 @@ async def health_check():
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
+    db_url = get_db_url()
+    logger.info(f"应用启动，连接到数据库: {db_url}")
     logger.info("应用启动")
 
 @app.on_event("shutdown")

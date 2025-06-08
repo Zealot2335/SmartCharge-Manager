@@ -63,8 +63,18 @@ class ChargingScheduler:
         return current_waiting_count < waiting_area_size
     
     @staticmethod
+    def get_all_piles_by_mode(db: Session, mode: ChargeMode) -> List[ChargePile]:
+        """获取指定模式下的所有充电桩，无论其状态如何"""
+        pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
+        return (
+            db.query(ChargePile)
+            .filter(ChargePile.type == pile_type)
+            .all()
+        )
+    
+    @staticmethod
     def get_available_piles(db: Session, mode: ChargeMode) -> List[ChargePile]:
-        """获取指定模式下可用的充电桩"""
+        """获取指定模式下可用于调度的充电桩"""
         pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
         return (
             db.query(ChargePile)
@@ -85,11 +95,11 @@ class ChargingScheduler:
     
     @staticmethod
     def get_pile_queue_length(db: Session, pile_id: int) -> int:
-        """获取指定充电桩的当前队列长度"""
+        """获取指定充电桩的当前队列长度（只计算正在充电的）"""
         return (
             db.query(CarRequest)
             .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status.in_([RequestStatus.QUEUING, RequestStatus.CHARGING]))
+            .filter(CarRequest.status == RequestStatus.CHARGING)
             .count()
         )
     
@@ -190,23 +200,26 @@ class ChargingScheduler:
         """
         将请求分配到充电桩队列
         """
+        logger.debug(f"Attempting to assign request {request_id} to pile {pile_id}")
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
+            logger.error(f"Assign failed: Request {request_id} not found.")
             return False, "充电请求不存在"
-            
+        
         pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
         if not pile:
+            logger.error(f"Assign failed: Pile {pile_id} not found.")
             return False, "充电桩不存在"
-            
+        
         # 检查充电桩类型是否匹配
         if (request.mode == ChargeMode.FAST and pile.type != "FAST") or \
            (request.mode == ChargeMode.SLOW and pile.type != "SLOW"):
             return False, "充电桩类型与请求不匹配"
-            
+        
         # 检查充电桩队列是否有空位
         if not ChargingScheduler.check_pile_queue_available(db, pile_id):
             return False, "充电桩队列已满"
-            
+        
         # 获取队列位置
         queue_position = ChargingScheduler.get_pile_queue_length(db, pile_id)
         
@@ -227,11 +240,27 @@ class ChargingScheduler:
         )
         db.add(queue_log)
         
+        # --- 这里是核心修改 ---
+        should_start_charging = (queue_position == 0 and pile.status == PileStatus.AVAILABLE)
+        
         # 更新充电桩状态
         if pile.status == PileStatus.AVAILABLE:
             pile.status = PileStatus.BUSY
-            
+        
+        # 提交分配的事务
         db.commit()
+
+        # 如果需要，独立启动充电流程
+        if should_start_charging:
+            logger.info(f"Request {request.id} is at the front of the queue for an available pile. Starting charging immediately.")
+            # 直接调用 start_charging，它会处理状态变更和日志记录
+            success, msg = ChargingScheduler.start_charging(db, request.id)
+            if not success:
+                logger.error(f"Failed to start charging for request {request.id}: {msg}")
+                # 启动失败，需要考虑回滚或错误处理
+        # --- 修改结束 ---
+        
+        logger.info(f"Successfully assigned request {request_id} to pile {pile.code} (ID: {pile_id}) at position {queue_position}")
         return True, f"成功分配到充电桩 {pile.code}, 队列位置 {queue_position}"
     
     @staticmethod
@@ -240,6 +269,7 @@ class ChargingScheduler:
         调用等候区下一辆车进入充电区
         返回被调度的请求ID，如果没有可调度的车辆则返回None
         """
+        logger.debug(f"Calling next waiting car for {mode.value} mode.")
         # 获取指定模式下，按照排队号码排序的第一辆等待中的车
         next_car = (
             db.query(CarRequest)
@@ -250,18 +280,24 @@ class ChargingScheduler:
         )
         
         if not next_car:
+            logger.debug(f"No waiting cars found for {mode.value} mode.")
             return None
             
         # 选择最优的充电桩
+        logger.debug(f"Found waiting car: request {next_car.id}. Selecting optimal pile.")
         best_pile_id = ChargingScheduler.select_optimal_pile(db, next_car.id)
         if not best_pile_id:
+            logger.debug(f"No optimal pile found for request {next_car.id}.")
             return None
             
         # 分配到充电桩
+        logger.info(f"Optimal pile for request {next_car.id} is {best_pile_id}. Assigning to pile.")
         success, _ = ChargingScheduler.assign_to_pile(db, next_car.id, best_pile_id)
         if success:
+            logger.info(f"Successfully assigned request {next_car.id} to pile {best_pile_id}.")
             return next_car.id
         else:
+            logger.error(f"Failed to assign request {next_car.id} to pile {best_pile_id}.")
             return None
     
     @staticmethod
@@ -271,23 +307,15 @@ class ChargingScheduler:
         返回被调度的请求ID列表
         """
         scheduled_cars = []
-        
-        # 检查快充模式
-        fast_piles = ChargingScheduler.get_available_piles(db, ChargeMode.FAST)
-        for pile in fast_piles:
-            if ChargingScheduler.check_pile_queue_available(db, pile.id):
-                car_id = ChargingScheduler.call_next_waiting_car(db, ChargeMode.FAST)
+        for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
+            while True:
+                car_id = ChargingScheduler.call_next_waiting_car(db, mode)
                 if car_id:
                     scheduled_cars.append(car_id)
-        
-        # 检查慢充模式
-        slow_piles = ChargingScheduler.get_available_piles(db, ChargeMode.SLOW)
-        for pile in slow_piles:
-            if ChargingScheduler.check_pile_queue_available(db, pile.id):
-                car_id = ChargingScheduler.call_next_waiting_car(db, ChargeMode.SLOW)
-                if car_id:
-                    scheduled_cars.append(car_id)
-                    
+                    logger.info(f"Scheduled car request {car_id} for {mode.value} charging.")
+                else:
+                    # No more cars can be scheduled for this mode
+                    break
         return scheduled_cars
     
     @staticmethod
