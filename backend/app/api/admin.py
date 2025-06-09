@@ -577,4 +577,90 @@ async def get_monthly_report(
 ):
     """获取月报表"""
     report = ReportService.get_monthly_report(db, year, month)
-    return report 
+    return report
+
+@router.get("/schedule-strategy", response_model=Dict[str, Any])
+async def get_schedule_strategy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """获取当前调度策略"""
+    from backend.app.core.config import get_station_config
+    config = get_station_config()
+    strategy = config.get("ScheduleStrategy", "default")
+    bulk_size = config.get("BulkScheduleSize", 10)
+    
+    strategy_description = ""
+    if strategy == "default":
+        strategy_description = "默认调度：按照排队号码顺序依次调度"
+    elif strategy == "batch_mode":
+        strategy_description = "单次调度总充电时长最短：多辆车一次性调度，按充电模式分配对应充电桩，满足总充电时长最短"
+    elif strategy == "bulk_mode":
+        strategy_description = f"批量调度总充电时长最短：等待车辆数量达到{bulk_size}辆时才进行一次批量调度，忽略充电模式，满足总充电时长最短"
+    
+    return {
+        "strategy": strategy,
+        "description": strategy_description,
+        "bulk_size": bulk_size
+    }
+
+@router.patch("/schedule-strategy", response_model=Dict[str, Any])
+async def update_schedule_strategy(
+    strategy: str = Query(..., description="调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)"),
+    bulk_size: int = Query(10, ge=1, description="批量调度时的车辆数量，仅在bulk_mode模式下有效"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """更新调度策略"""
+    # 验证策略有效性
+    if strategy not in ["default", "batch_mode", "bulk_mode"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的调度策略: {strategy}"
+        )
+    
+    # 更新配置文件
+    import yaml
+    import os
+    from backend.app.core.config import CONFIG_PATH
+    
+    try:
+        # 读取当前配置
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # 更新调度策略
+        if "station" not in config:
+            config["station"] = {}
+        
+        config["station"]["ScheduleStrategy"] = strategy
+        config["station"]["BulkScheduleSize"] = bulk_size
+        
+        # 写回配置文件
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+        
+        # 重新加载配置
+        from backend.app.core.config import get_config
+        get_config()  # 强制重新加载配置
+        
+        # 返回更新后的策略
+        strategy_description = ""
+        if strategy == "default":
+            strategy_description = "默认调度：按照排队号码顺序依次调度"
+        elif strategy == "batch_mode":
+            strategy_description = "单次调度总充电时长最短：多辆车一次性调度，按充电模式分配对应充电桩，满足总充电时长最短"
+        elif strategy == "bulk_mode":
+            strategy_description = f"批量调度总充电时长最短：等待车辆数量达到{bulk_size}辆时才进行一次批量调度，忽略充电模式，满足总充电时长最短"
+        
+        return {
+            "strategy": strategy,
+            "description": strategy_description,
+            "bulk_size": bulk_size,
+            "message": "调度策略更新成功"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新调度策略失败: {str(e)}"
+        ) 

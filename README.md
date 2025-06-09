@@ -168,14 +168,3 @@ uvicorn backend.app.main:app --reload
 ### 前端开发
 
 前端采用原生HTML、CSS和JavaScript开发，无需构建工具。直接修改前端文件后刷新浏览器即可查看效果。
-
-## 许可证
-
-本项目采用MIT许可证。详见LICENSE文件。
-
-## 联系方式
-
-如有问题，请通过以下方式联系：
-
-- 邮箱：your.email@example.com
-- GitHub Issues：https://github.com/yourusername/smart-charge-manager/issues 

@@ -430,6 +430,32 @@ const admin = {
     resolveFault: (faultId) => {
         return request(`/admin/faults/${faultId}/resolve`, 'POST');
     },
+    
+    /**
+     * 获取当前调度策略
+     * @returns {Promise} 当前调度策略
+     */
+    getScheduleStrategy: () => {
+        return request('/admin/schedule-strategy', 'GET');
+    },
+    
+    /**
+     * 更新调度策略
+     * @param {string} strategy - 调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)
+     * @param {number} bulkSize - 批量调度时的车辆数量，仅在bulk_mode模式下有效
+     * @returns {Promise} 更新结果
+     */
+    updateScheduleStrategy: (strategy, bulkSize = 10) => {
+        return request(`/admin/schedule-strategy?strategy=${strategy}&bulk_size=${bulkSize}`, 'PATCH');
+    },
+
+    /**
+     * 获取等候区状态
+     * @returns {Promise<any>} 等候区状态信息
+     */
+    getWaitingAreaStatus: async () => {
+        return await request('/admin/waiting_area');
+    },
 };
 
 /**

@@ -1,13 +1,14 @@
-from typing import List, Dict, Tuple, Optional, Any
-from datetime import datetime
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 import logging
+import math
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional, Tuple, Any
 
-from backend.app.db.models import ChargePile, CarRequest, QueueLog, ChargeSession
-from backend.app.db.schemas import ChargeMode, PileStatus, RequestStatus
-from backend.app.core.config import get_station_config
+from sqlalchemy.orm import Session
+
+from backend.app.db.models import CarRequest, ChargePile, ChargeSession, QueueLog
+from backend.app.db.schemas import RequestStatus, ChargeMode, PileStatus
 from backend.app.services.billing import BillingService
+from backend.app.core.config import get_station_config
 
 logger = logging.getLogger(__name__)
 
@@ -343,10 +344,31 @@ class ChargingScheduler:
     def check_and_call_waiting_cars(db: Session):
         """
         检查并呼叫等候区的车辆 (主调度入口)
+        根据配置选择调度策略：
+        - default: 默认调度，按照排队号码顺序依次调度
+        - batch_mode: 单次调度总充电时长最短
+        - bulk_mode: 批量调度总充电时长最短
         """
         logger.info("--- Main Scheduler: Checking and calling waiting cars ---")
-        for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
-            ChargingScheduler.call_next_waiting_car(db, mode)
+        
+        # 获取调度策略配置
+        config = get_station_config()
+        strategy = config.get("ScheduleStrategy", "default")
+        
+        if strategy == "batch_mode":
+            # 单次调度总充电时长最短
+            logger.info("使用单次调度总充电时长最短策略")
+            for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
+                ChargingScheduler.batch_schedule_shortest_total_time(db, mode)
+        elif strategy == "bulk_mode":
+            # 批量调度总充电时长最短
+            logger.info("使用批量调度总充电时长最短策略")
+            ChargingScheduler.bulk_schedule_shortest_total_time(db)
+        else:
+            # 默认调度
+            logger.info("使用默认调度策略")
+            for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
+                ChargingScheduler.call_next_waiting_car(db, mode)
     
     @staticmethod
     def start_charging(db: Session, request_id: int) -> Tuple[bool, str]:
@@ -649,4 +671,290 @@ class ChargingScheduler:
             return ChargingScheduler.assign_to_pile(db, request_id, best_pile.id)
         except Exception as e:
             logger.error(f"Error scheduling request {request_id}: {e}", exc_info=True)
-            return False 
+            return False
+
+    @staticmethod
+    def batch_schedule_shortest_total_time(db: Session, mode: ChargeMode):
+        """
+        单次调度总充电时长最短：
+        当充电区某种模式的充电桩出现M个空位时，系统可在等候区该模式对应的队列中，
+        按照编号顺序一次性叫N个号(N<=M)，此时进入充电区的多辆车不再按照编号顺序依次调度，
+        而是"统一调度"，策略为：
+        1. 按充电模式分配对应充电桩
+        2. 满足进入充电区的多辆车完成充电总时长(所有车累计等待时间+累计充电时间)最短
+        """
+        logger.info(f"[{mode.value}] 开始执行单次调度总充电时长最短策略")
+        
+        # 1. 获取可用充电桩数量
+        available_piles = ChargingScheduler.get_available_piles_for_dispatch(db, mode)
+        if not available_piles:
+            logger.info(f"[{mode.value}] 没有可用充电桩，跳过调度")
+            return
+        
+        # 计算可用空位数量
+        available_slots = 0
+        for pile in available_piles:
+            # 检查每个充电桩的可用空位
+            queue_length = ChargingScheduler.get_pile_queue_length(db, pile.id)
+            charging_car = db.query(CarRequest).filter(
+                CarRequest.pile_id == pile.id,
+                CarRequest.status == RequestStatus.CHARGING
+            ).first()
+            
+            # 如果没有正在充电的车，则第一个位置也可用
+            if not charging_car:
+                available_slots += 1
+            
+            # 剩余队列位置
+            config = get_station_config()
+            max_queue_len = config.get("ChargingQueueLen", 2)
+            available_slots += max_queue_len - queue_length - (1 if charging_car else 0)
+        
+        if available_slots <= 0:
+            logger.info(f"[{mode.value}] 没有可用空位，跳过调度")
+            return
+        
+        # 2. 获取等候区中该模式的车辆
+        waiting_cars = db.query(CarRequest).filter(
+            CarRequest.mode == mode,
+            CarRequest.status == RequestStatus.WAITING
+        ).order_by(CarRequest.queue_number).limit(available_slots).all()
+        
+        if not waiting_cars:
+            logger.info(f"[{mode.value}] 等候区没有{mode.value}模式的车辆，跳过调度")
+            return
+        
+        logger.info(f"[{mode.value}] 找到{len(waiting_cars)}辆等候车辆，可用空位{available_slots}个")
+        
+        # 如果只有一辆车，直接使用原有调度方式
+        if len(waiting_cars) == 1:
+            logger.info(f"[{mode.value}] 只有一辆车，使用原有调度方式")
+            best_pile = ChargingScheduler.select_optimal_pile(db, waiting_cars[0])
+            if best_pile:
+                ChargingScheduler.assign_to_pile(db, waiting_cars[0].id, best_pile.id)
+            return
+        
+        # 3. 计算所有可能的分配方案
+        # 使用回溯法生成所有可能的分配方案
+        def generate_assignments(cars, piles, current_assignment=None, all_assignments=None):
+            if current_assignment is None:
+                current_assignment = {}
+            if all_assignments is None:
+                all_assignments = []
+            
+            # 如果所有车辆都已分配，添加到结果中
+            if len(current_assignment) == len(cars):
+                all_assignments.append(current_assignment.copy())
+                return
+            
+            # 获取下一个待分配的车辆
+            car_idx = len(current_assignment)
+            car = cars[car_idx]
+            
+            # 尝试分配到每个充电桩
+            for pile in piles:
+                # 检查充电桩是否有足够空间
+                pile_assignments = [c_id for c_id, p_id in current_assignment.items() if p_id == pile.id]
+                if len(pile_assignments) >= config.get("ChargingQueueLen", 2):
+                    continue
+                
+                # 分配车辆到充电桩
+                current_assignment[car.id] = pile.id
+                generate_assignments(cars, piles, current_assignment, all_assignments)
+                del current_assignment[car.id]
+            
+            return all_assignments
+        
+        # 生成所有可能的分配方案
+        all_possible_assignments = generate_assignments(waiting_cars, available_piles)
+        
+        if not all_possible_assignments:
+            logger.warning(f"[{mode.value}] 无法生成有效的分配方案")
+            return
+        
+        logger.info(f"[{mode.value}] 生成了{len(all_possible_assignments)}种可能的分配方案")
+        
+        # 4. 评估每种方案的总充电时长
+        best_assignment = None
+        min_total_time = float('inf')
+        
+        for assignment in all_possible_assignments:
+            # 计算总充电时长
+            total_time = 0
+            
+            # 为每个充电桩创建队列
+            pile_queues = {}
+            for car_id, pile_id in assignment.items():
+                if pile_id not in pile_queues:
+                    pile_queues[pile_id] = []
+                pile_queues[pile_id].append(next(car for car in waiting_cars if car.id == car_id))
+            
+            # 对每个充电桩的队列按照排队号码排序
+            for pile_id, queue in pile_queues.items():
+                queue.sort(key=lambda car: car.queue_number)
+            
+            # 计算每个充电桩的总等待时间和充电时间
+            for pile_id, queue in pile_queues.items():
+                pile = next(p for p in available_piles if p.id == pile_id)
+                
+                # 获取当前充电桩的状态
+                current_queue = db.query(CarRequest).filter(
+                    CarRequest.pile_id == pile_id,
+                    CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING])
+                ).order_by(CarRequest.queue_position).all()
+                
+                # 计算当前队列的等待时间
+                waiting_time = ChargingScheduler.get_pile_queue_waiting_time(db, pile_id)
+                
+                # 计算新车辆的等待时间和充电时间
+                for i, car in enumerate(queue):
+                    # 等待时间 = 当前队列等待时间 + 前面新车的充电时间
+                    car_waiting_time = waiting_time
+                    for j in range(i):
+                        car_waiting_time += (queue[j].amount_kwh / pile.power) * 60  # 转换为分钟
+                    
+                    # 充电时间
+                    car_charging_time = (car.amount_kwh / pile.power) * 60  # 转换为分钟
+                    
+                    # 总时间
+                    total_time += car_waiting_time + car_charging_time
+            
+            # 更新最佳方案
+            if total_time < min_total_time:
+                min_total_time = total_time
+                best_assignment = assignment
+        
+        if not best_assignment:
+            logger.warning(f"[{mode.value}] 无法找到最佳分配方案")
+            return
+        
+        logger.info(f"[{mode.value}] 找到最佳分配方案，总充电时长为{min_total_time:.2f}分钟")
+        
+        # 5. 执行最佳方案
+        for car_id, pile_id in best_assignment.items():
+            success = ChargingScheduler.assign_to_pile(db, car_id, pile_id)
+            if not success:
+                logger.error(f"[{mode.value}] 分配车辆{car_id}到充电桩{pile_id}失败")
+        
+        logger.info(f"[{mode.value}] 单次调度总充电时长最短策略执行完成")
+
+    @staticmethod
+    def bulk_schedule_shortest_total_time(db: Session):
+        """
+        批量调度总充电时长最短：
+        为了提高效率，假设只有当到达充电站的车辆等于充电区全部车位数量时，才开始进行一次批量调度，
+        完成之后再进行下一批。规定进入充电区的一批车不再按照编号顺序依次调度，而是"统一调度"，
+        系统调度策略为：
+        1. 忽略每辆车的请求充电模式，所有车辆均可分配任意类型充电桩
+        2. 满足一批车辆完成充电总时长(所有车累计等待时间+累计充电时间)最短
+        """
+        logger.info("开始执行批量调度总充电时长最短策略")
+        
+        # 1. 获取配置中的批量调度车辆数量
+        config = get_station_config()
+        bulk_size = config.get("BulkScheduleSize", 10)
+        
+        # 2. 获取等候区中的车辆数量
+        waiting_cars_count = db.query(CarRequest).filter(
+            CarRequest.status == RequestStatus.WAITING
+        ).count()
+        
+        if waiting_cars_count < bulk_size:
+            logger.info(f"等候区车辆数量({waiting_cars_count})不足批量调度要求({bulk_size})，跳过调度")
+            return
+        
+        # 3. 获取所有可用的充电桩
+        all_available_piles = []
+        for mode in [ChargeMode.FAST, ChargeMode.SLOW]:
+            piles = ChargingScheduler.get_available_piles_for_dispatch(db, mode)
+            all_available_piles.extend(piles)
+        
+        if not all_available_piles:
+            logger.info("没有可用充电桩，跳过调度")
+            return
+        
+        # 计算可用空位总数
+        total_available_slots = 0
+        for pile in all_available_piles:
+            # 检查每个充电桩的可用空位
+            queue_length = ChargingScheduler.get_pile_queue_length(db, pile.id)
+            charging_car = db.query(CarRequest).filter(
+                CarRequest.pile_id == pile.id,
+                CarRequest.status == RequestStatus.CHARGING
+            ).first()
+            
+            # 如果没有正在充电的车，则第一个位置也可用
+            if not charging_car:
+                total_available_slots += 1
+            
+            # 剩余队列位置
+            max_queue_len = config.get("ChargingQueueLen", 2)
+            total_available_slots += max_queue_len - queue_length - (1 if charging_car else 0)
+        
+        if total_available_slots < bulk_size:
+            logger.info(f"可用空位数量({total_available_slots})不足批量调度要求({bulk_size})，跳过调度")
+            return
+        
+        # 4. 获取等候区中的车辆（按照排队号码排序）
+        waiting_cars = db.query(CarRequest).filter(
+            CarRequest.status == RequestStatus.WAITING
+        ).order_by(CarRequest.queue_number).limit(bulk_size).all()
+        
+        if len(waiting_cars) < bulk_size:
+            logger.info(f"等候区车辆数量({len(waiting_cars)})不足批量调度要求({bulk_size})，跳过调度")
+            return
+        
+        logger.info(f"找到{len(waiting_cars)}辆等候车辆，开始批量调度")
+        
+        # 5. 计算所有可能的分配方案
+        # 由于组合数可能非常大，这里使用贪心算法而不是穷举
+        # 首先按照充电量从大到小排序车辆
+        waiting_cars.sort(key=lambda car: car.amount_kwh, reverse=True)
+        
+        # 为每个充电桩创建队列
+        pile_queues = {pile.id: [] for pile in all_available_piles}
+        
+        # 计算每个充电桩的当前等待时间
+        pile_waiting_times = {}
+        for pile in all_available_piles:
+            pile_waiting_times[pile.id] = ChargingScheduler.get_pile_queue_waiting_time(db, pile.id)
+        
+        # 贪心分配：每次选择完成时间最早的充电桩
+        for car in waiting_cars:
+            best_pile_id = None
+            min_finish_time = float('inf')
+            
+            for pile in all_available_piles:
+                # 检查充电桩是否有足够空间
+                if len(pile_queues[pile.id]) >= config.get("ChargingQueueLen", 2):
+                    continue
+                
+                # 计算在该充电桩上的完成时间
+                waiting_time = pile_waiting_times[pile.id]
+                charging_time = (car.amount_kwh / pile.power) * 60  # 转换为分钟
+                finish_time = waiting_time + charging_time
+                
+                if finish_time < min_finish_time:
+                    min_finish_time = finish_time
+                    best_pile_id = pile.id
+            
+            if best_pile_id:
+                # 分配车辆到最佳充电桩
+                pile_queues[best_pile_id].append(car)
+                # 更新该充电桩的等待时间
+                pile = next(p for p in all_available_piles if p.id == best_pile_id)
+                pile_waiting_times[best_pile_id] += (car.amount_kwh / pile.power) * 60
+            else:
+                logger.warning(f"无法为车辆{car.id}找到合适的充电桩")
+        
+        # 6. 执行分配方案
+        assigned_count = 0
+        for pile_id, queue in pile_queues.items():
+            for car in queue:
+                success = ChargingScheduler.assign_to_pile(db, car.id, pile_id)
+                if success:
+                    assigned_count += 1
+                else:
+                    logger.error(f"分配车辆{car.id}到充电桩{pile_id}失败")
+        
+        logger.info(f"批量调度完成，成功分配{assigned_count}辆车") 
