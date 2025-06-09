@@ -310,6 +310,41 @@ class ChargingService:
                     result["bill_id"] = bill_detail.bill_id
             else:
                 logger.warning(f"充电会话不存在: 请求ID={request_id}")
+        # 处理已取消但曾经充电过的请求
+        elif request.status == RequestStatus.CANCELED and request.start_time:
+            logger.info(f"处理已取消但曾经充电过的请求: ID={request_id}")
+            # 查询充电会话
+            session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+            if session:
+                result["session_id"] = session.id
+                result["charged_kwh"] = session.charged_kwh
+                result["charging_minutes"] = session.charging_time
+                result["charge_fee"] = session.charge_fee
+                result["service_fee"] = session.service_fee
+                result["total_fee"] = session.total_fee
+                result["start_time"] = session.start_time
+                result["end_time"] = session.end_time
+                
+                # 计算充电进度
+                progress = min(session.charged_kwh / request.amount_kwh * 100, 100) if request.amount_kwh > 0 else 0
+                result["progress"] = progress
+                result["charging_progress"] = progress
+                
+                # 查询详单
+                bill_detail = db.query(BillDetail).filter(BillDetail.session_id == session.id).first()
+                if bill_detail:
+                    result["detail_number"] = bill_detail.detail_number
+                    result["bill_id"] = bill_detail.bill_id
+                else:
+                    # 如果没有找到详单，尝试生成一个
+                    logger.info(f"尝试为已取消的充电会话 {session.id} 生成账单")
+                    bill_detail = ChargingService.generate_bill(db, session)
+                    if bill_detail:
+                        db.commit()
+                        result["detail_number"] = bill_detail.detail_number
+                        result["bill_id"] = bill_detail.bill_id
+            else:
+                logger.warning(f"充电会话不存在: 请求ID={request_id}")
         elif request.status in [RequestStatus.WAITING, RequestStatus.QUEUING]:
             logger.info(f"处理等待/排队中请求: ID={request_id}, 状态={request.status}")
             # 对于等待或排队中的请求，保持默认值

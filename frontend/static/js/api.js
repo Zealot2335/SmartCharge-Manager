@@ -290,11 +290,12 @@ const billing = {
     
     /**
      * 获取账单详情
-     * @param {number} billId - 账单ID
+     * @param {number} sessionId - 会话ID
      * @returns {Promise} 账单详情
      */
-    getBillDetails: (billId) => {
-        return request(`/billing/bills/${billId}`, 'GET');
+    getBillDetails: (sessionId) => {
+        console.log(`Getting bill details for session ID: ${sessionId}`);
+        return request(`/billing/bills/${sessionId}`, 'GET');
     },
     
     /**
