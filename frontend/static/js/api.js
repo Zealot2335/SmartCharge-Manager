@@ -332,10 +332,11 @@ const admin = {
     /**
      * 关闭充电桩
      * @param {string} pileCode - 充电桩编号
+     * @param {string} strategy - 故障恢复策略 (priority或time_order)
      * @returns {Promise} 更新结果
      */
-    shutdownPile: (pileCode) => {
-        return request(`/admin/pile/${pileCode}/shutdown`, 'POST');
+    shutdownPile: (pileCode, strategy = "priority") => {
+        return request(`/admin/pile/${pileCode}/shutdown?strategy=${strategy}`, 'POST');
     },
     
     /**

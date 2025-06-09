@@ -218,15 +218,53 @@ class ChargingScheduler:
         return best_pile
     
     @staticmethod
-    def assign_to_pile(db: Session, request: CarRequest, pile: ChargePile):
+    def find_best_pile(db: Session, mode: ChargeMode, amount_kwh: float) -> Optional[ChargePile]:
+        """
+        根据充电模式和充电量找到最优的充电桩
+        策略：完成充电所需时长（等待时间+自己充电时间）最短
+        """
+        available_piles = ChargingScheduler.get_available_piles_for_dispatch(db, mode)
+        if not available_piles:
+            return None
+            
+        best_pile = None
+        min_finish_time = float('inf')
+        
+        for pile in available_piles:
+            finish_time = ChargingScheduler.calculate_total_finish_time(db, pile.id, amount_kwh)
+            if finish_time < min_finish_time:
+                min_finish_time = finish_time
+                best_pile = pile
+                
+        return best_pile
+    
+    @staticmethod
+    def calculate_finish_time(db: Session, pile_id: int, amount_kwh: float) -> float:
+        """
+        计算在指定充电桩充电的预计完成时间
+        """
+        return ChargingScheduler.calculate_total_finish_time(db, pile_id, amount_kwh)
+    
+    @staticmethod
+    def assign_to_pile(db: Session, request_id: int, pile_id: int) -> bool:
         """
         将请求分配到充电桩队列
         """
         try:
+            request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
+            if not request:
+                logger.error(f"Request {request_id} not found")
+                return False
+                
+            pile = db.query(ChargePile).filter(ChargePile.id == pile_id).first()
+            if not pile:
+                logger.error(f"Pile {pile_id} not found")
+                return False
+                
             # 获取当前队列中的车辆数量（充电中+排队中）
             current_queue = (
                 db.query(CarRequest)
-                .filter(CarRequest.pile_id == pile.id)
+                .filter(CarRequest.pile_id == pile_id)
                 .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
                 .order_by(CarRequest.queue_position)
                 .all()
@@ -237,14 +275,14 @@ class ChargingScheduler:
             
             old_status = request.status
             request.status = RequestStatus.QUEUING
-            request.pile_id = pile.id
+            request.pile_id = pile_id
             request.queue_position = queue_position
             
             queue_log = QueueLog(
                 request_id=request.id,
                 from_status=old_status,
                 to_status=RequestStatus.QUEUING,
-                pile_id=pile.id,
+                pile_id=pile_id,
                 queue_position=queue_position,
                 remark=f"分配到充电桩 {pile.code}, 队列位置 {queue_position}"
             )
@@ -259,9 +297,12 @@ class ChargingScheduler:
             
             if queue_position == 0:
                 ChargingScheduler.start_charging(db, request.id)
+                
+            return True
         except Exception as e:
-            logger.error(f"Error assigning request {request.id} to pile {pile.id}: {e}", exc_info=True)
+            logger.error(f"Error assigning request {request_id} to pile {pile_id}: {e}", exc_info=True)
             db.rollback()
+            return False
 
     @staticmethod
     def call_next_waiting_car(db: Session, mode: ChargeMode):
@@ -294,7 +335,7 @@ class ChargingScheduler:
         
         if best_pile:
             logger.info(f"[{mode.value}] Step 3 Result: Optimal pile is {best_pile.code}. Assigning to pile.")
-            ChargingScheduler.assign_to_pile(db, next_car, best_pile)
+            ChargingScheduler.assign_to_pile(db, next_car.id, best_pile.id)
         else:
             logger.warning(f"[{mode.value}] Step 3 Result: No optimal pile found for request {next_car.id}.")
 
@@ -585,4 +626,27 @@ class ChargingScheduler:
             .filter(ChargePile.type == pile_type)
             .filter(ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY]))
             .all()
-        ) 
+        )
+
+    @staticmethod
+    def schedule_request(db: Session, request_id: int) -> bool:
+        """
+        调度单个请求
+        """
+        try:
+            request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
+            if not request:
+                logger.error(f"Request {request_id} not found")
+                return False
+                
+            # 找到最优的充电桩
+            best_pile = ChargingScheduler.find_best_pile(db, request.mode, request.amount_kwh)
+            if not best_pile:
+                logger.warning(f"No available pile found for request {request_id}")
+                return False
+                
+            # 分配到充电桩
+            return ChargingScheduler.assign_to_pile(db, request_id, best_pile.id)
+        except Exception as e:
+            logger.error(f"Error scheduling request {request_id}: {e}", exc_info=True)
+            return False 

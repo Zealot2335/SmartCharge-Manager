@@ -7,11 +7,13 @@ from backend.app.db.database import get_db
 from backend.app.db.models import User, ChargePile, CarRequest, RateRule, ServiceRate
 from backend.app.db.schemas import (
     ChargePile as ChargePileSchema, PileStatus,
-    RateRule as RateRuleSchema, RateType, ServiceRate as ServiceRateSchema
+    RateRule as RateRuleSchema, RateType, ServiceRate as ServiceRateSchema,
+    RequestStatus
 )
 from backend.app.core.auth import get_admin_user
 from backend.app.services.report import ReportService
 from backend.app.services.fault_handler import FaultHandler
+from backend.app.services.scheduler import ChargingScheduler
 
 router = APIRouter()
 
@@ -213,6 +215,7 @@ async def power_on_pile(
 @router.post("/pile/{code}/shutdown", response_model=Dict[str, Any])
 async def shutdown_pile(
     code: str,
+    strategy: str = Query("priority", description="故障恢复策略，priority或time_order"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
@@ -239,17 +242,68 @@ async def shutdown_pile(
         .first()
     )
     
-    if charging_car:
+    # 如果有正在充电的车辆或排队中的车辆，先处理这些车辆
+    affected_cars = 0
+    rescheduled_cars = []
+    
+    try:
+        # 先报告故障，这会停止计费并生成详单，将所有车辆移回等候区
+        if charging_car or db.query(CarRequest).filter(CarRequest.pile_id == pile.id).filter(CarRequest.status == "QUEUING").count() > 0:
+            success, message = FaultHandler.report_pile_fault(db, pile.id, f"管理员禁用充电桩 {code}")
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=message
+                )
+            
+            # 获取所有被移回等候区的车辆
+            affected_requests = (
+                db.query(CarRequest)
+                .filter(CarRequest.status == RequestStatus.WAITING)
+                .filter(CarRequest.end_time != None)  # 曾经充过电的
+                .all()
+            )
+            affected_cars = len(affected_requests)
+            
+            # 重新调度这些车辆
+            for request in affected_requests:
+                # 根据策略选择调度方法
+                if strategy == "priority":
+                    # 找到最优的同类型充电桩
+                    best_pile = ChargingScheduler.find_best_pile(db, request.mode, request.amount_kwh)
+                    if best_pile:
+                        # 分配到充电桩
+                        success = ChargingScheduler.assign_to_pile(db, request.id, best_pile.id)
+                        if success:
+                            rescheduled_cars.append(request.id)
+                elif strategy == "time_order":
+                    # 时间顺序调度，按照排队号码排序
+                    # 这里简化处理，直接调用调度器的方法
+                    success = ChargingScheduler.schedule_request(db, request.id)
+                    if success:
+                        rescheduled_cars.append(request.id)
+        
+        # 更新充电桩状态为关闭
+        pile.status = PileStatus.OFFLINE
+        db.commit()
+        
+        if affected_cars > 0:
+            return {
+                "code": code, 
+                "status": PileStatus.OFFLINE, 
+                "message": f"充电桩 {code} 已关闭，影响 {affected_cars} 辆车，重新调度 {len(rescheduled_cars)} 辆车",
+                "strategy": strategy,
+                "affected_cars": affected_cars,
+                "rescheduled_cars": len(rescheduled_cars)
+            }
+        else:
+            return {"code": code, "status": PileStatus.OFFLINE, "message": f"充电桩 {code} 已关闭"}
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"充电桩 {code} 有车辆正在充电，无法关闭"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"关闭充电桩失败: {str(e)}"
         )
-    
-    # 更新充电桩状态
-    pile.status = PileStatus.OFFLINE
-    db.commit()
-    
-    return {"code": code, "status": pile.status, "message": f"充电桩 {code} 已关闭"}
 
 @router.get("/requests", response_model=List[Dict[str, Any]])
 async def get_recent_requests(

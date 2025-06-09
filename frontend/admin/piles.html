@@ -452,11 +452,69 @@
         // 禁用充电桩
         async function handleShutdown(pileCode) {
             try {
-                if (confirm(`确定要禁用充电桩 ${pileCode} 吗？`)) {
-                    await API.admin.shutdownPile(pileCode);
-                    alert(`充电桩 ${pileCode} 已禁用`);
-                    loadPileStatus(); // 重新加载状态
+                // 创建一个自定义对话框，让用户选择故障恢复策略
+                const strategy = await new Promise((resolve) => {
+                    // 创建对话框元素
+                    const dialog = document.createElement('div');
+                    dialog.style.position = 'fixed';
+                    dialog.style.top = '0';
+                    dialog.style.left = '0';
+                    dialog.style.width = '100%';
+                    dialog.style.height = '100%';
+                    dialog.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                    dialog.style.zIndex = '1000';
+                    dialog.style.display = 'flex';
+                    dialog.style.justifyContent = 'center';
+                    dialog.style.alignItems = 'center';
+                    
+                    // 对话框内容
+                    dialog.innerHTML = `
+                        <div style="background: white; padding: 20px; border-radius: 5px; max-width: 400px; width: 100%;">
+                            <h3>禁用充电桩 ${pileCode}</h3>
+                            <p>确定要禁用此充电桩吗？如果有车辆正在充电，将会停止计费并生成详单。</p>
+                            <div style="margin: 15px 0;">
+                                <p><strong>请选择故障恢复策略：</strong></p>
+                                <div style="margin: 10px 0;">
+                                    <input type="radio" id="priority" name="strategy" value="priority" checked>
+                                    <label for="priority">优先级调度 - 优先为故障充电桩队列提供调度</label>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <input type="radio" id="time_order" name="strategy" value="time_order">
+                                    <label for="time_order">时间顺序调度 - 按照排队号码先后顺序重新调度</label>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+                                <button id="cancel-btn" style="padding: 8px 15px; border: none; background: #ccc; border-radius: 4px; cursor: pointer;">取消</button>
+                                <button id="confirm-btn" style="padding: 8px 15px; border: none; background: #dc3545; color: white; border-radius: 4px; cursor: pointer;">确认禁用</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 添加到文档
+                    document.body.appendChild(dialog);
+                    
+                    // 绑定事件
+                    document.getElementById('cancel-btn').addEventListener('click', () => {
+                        document.body.removeChild(dialog);
+                        resolve(null);
+                    });
+                    
+                    document.getElementById('confirm-btn').addEventListener('click', () => {
+                        const selectedStrategy = document.querySelector('input[name="strategy"]:checked').value;
+                        document.body.removeChild(dialog);
+                        resolve(selectedStrategy);
+                    });
+                });
+                
+                // 如果用户取消了操作
+                if (!strategy) {
+                    return;
                 }
+                
+                // 发送禁用请求
+                await API.admin.shutdownPile(pileCode, strategy);
+                alert(`充电桩 ${pileCode} 已禁用，使用 ${strategy === 'priority' ? '优先级' : '时间顺序'} 调度策略`);
+                loadPileStatus(); // 重新加载状态
             } catch (error) {
                 console.error('禁用充电桩失败:', error);
                 alert(`禁用充电桩失败: ${error.message || '未知错误'}`);
