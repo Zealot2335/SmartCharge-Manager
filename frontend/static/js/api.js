@@ -406,6 +406,25 @@ const admin = {
     },
     
     /**
+     * 获取周报表
+     * @param {string} dateInWeek - 周内任意日期 (YYYY-MM-DD)
+     * @returns {Promise} 报表数据
+     */
+    getWeeklyReport: (dateInWeek) => {
+        return request(`/admin/reports/weekly?date_in_week=${dateInWeek}`, 'GET');
+    },
+    
+    /**
+     * 获取月报表
+     * @param {number} year - 年份
+     * @param {number} month - 月份 (1-12)
+     * @returns {Promise} 报表数据
+     */
+    getMonthlyReport: (year, month) => {
+        return request(`/admin/reports/monthly?year=${year}&month=${month}`, 'GET');
+    },
+    
+    /**
      * 获取故障日志
      * @returns {Promise} 故障日志列表
      */

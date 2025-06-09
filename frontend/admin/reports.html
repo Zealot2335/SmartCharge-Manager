@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报表统计 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <h1 class="card-title">报表统计</h1>
+                <p>查看充电桩使用情况和收入统计报表。</p>
+            </div>
+
+            <!-- 报表类型选择 -->
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">报表类型</h2>
+                <div class="report-tabs">
+                    <button id="daily-tab" class="tab-btn active">日报表</button>
+                    <button id="weekly-tab" class="tab-btn">周报表</button>
+                    <button id="monthly-tab" class="tab-btn">月报表</button>
+                </div>
+            </div>
+
+            <!-- 日报表 -->
+            <div id="daily-report" class="report-panel active">
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">日报表查询</h2>
+                    <div class="form-group">
+                        <label for="daily-date">选择日期</label>
+                        <div class="date-selector">
+                            <input type="date" id="daily-date" class="form-control" value="">
+                            <button id="daily-search-btn" class="btn">查询</button>
+                            <button id="daily-export-btn" class="btn btn-secondary">导出CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">日报表数据</h2>
+                    <div id="daily-summary" class="report-summary">
+                        <div class="summary-item">
+                            <span class="summary-label">日期</span>
+                            <span id="daily-date-display" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电次数</span>
+                            <span id="daily-total-count" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电量</span>
+                            <span id="daily-total-kwh" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电费用</span>
+                            <span id="daily-total-charge-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计服务费用</span>
+                            <span id="daily-total-service-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计总费用</span>
+                            <span id="daily-total-fee" class="summary-value">--</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>充电桩编号</th>
+                                    <th>累计充电次数</th>
+                                    <th>累计充电时长</th>
+                                    <th>累计充电量</th>
+                                    <th>累计充电费用</th>
+                                    <th>累计服务费用</th>
+                                    <th>累计总费用</th>
+                                </tr>
+                            </thead>
+                            <tbody id="daily-report-table">
+                                <tr>
+                                    <td colspan="7" class="text-center">请选择日期查询报表数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 周报表 -->
+            <div id="weekly-report" class="report-panel">
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">周报表查询</h2>
+                    <div class="form-group">
+                        <label for="weekly-date">选择周内任意日期</label>
+                        <div class="date-selector">
+                            <input type="date" id="weekly-date" class="form-control" value="">
+                            <button id="weekly-search-btn" class="btn">查询</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">周报表数据</h2>
+                    <div id="weekly-summary" class="report-summary">
+                        <div class="summary-item">
+                            <span class="summary-label">周期</span>
+                            <span id="weekly-period-display" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电次数</span>
+                            <span id="weekly-total-count" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电量</span>
+                            <span id="weekly-total-kwh" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电费用</span>
+                            <span id="weekly-total-charge-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计服务费用</span>
+                            <span id="weekly-total-service-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计总费用</span>
+                            <span id="weekly-total-fee" class="summary-value">--</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>充电桩编号</th>
+                                    <th>累计充电次数</th>
+                                    <th>累计充电时长</th>
+                                    <th>累计充电量</th>
+                                    <th>累计充电费用</th>
+                                    <th>累计服务费用</th>
+                                    <th>累计总费用</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weekly-report-table">
+                                <tr>
+                                    <td colspan="7" class="text-center">请选择日期查询报表数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 月报表 -->
+            <div id="monthly-report" class="report-panel">
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">月报表查询</h2>
+                    <div class="form-group">
+                        <label for="monthly-year">选择年月</label>
+                        <div class="date-selector">
+                            <select id="monthly-year" class="form-control">
+                                <!-- 动态生成年份选项 -->
+                            </select>
+                            <select id="monthly-month" class="form-control">
+                                <option value="1">1月</option>
+                                <option value="2">2月</option>
+                                <option value="3">3月</option>
+                                <option value="4">4月</option>
+                                <option value="5">5月</option>
+                                <option value="6">6月</option>
+                                <option value="7">7月</option>
+                                <option value="8">8月</option>
+                                <option value="9">9月</option>
+                                <option value="10">10月</option>
+                                <option value="11">11月</option>
+                                <option value="12">12月</option>
+                            </select>
+                            <button id="monthly-search-btn" class="btn">查询</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2 class="card-title">月报表数据</h2>
+                    <div id="monthly-summary" class="report-summary">
+                        <div class="summary-item">
+                            <span class="summary-label">月份</span>
+                            <span id="monthly-period-display" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电次数</span>
+                            <span id="monthly-total-count" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电量</span>
+                            <span id="monthly-total-kwh" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计充电费用</span>
+                            <span id="monthly-total-charge-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计服务费用</span>
+                            <span id="monthly-total-service-fee" class="summary-value">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">累计总费用</span>
+                            <span id="monthly-total-fee" class="summary-value">--</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>充电桩编号</th>
+                                    <th>累计充电次数</th>
+                                    <th>累计充电时长</th>
+                                    <th>累计充电量</th>
+                                    <th>累计充电费用</th>
+                                    <th>累计服务费用</th>
+                                    <th>累计总费用</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-report-table">
+                                <tr>
+                                    <td colspan="7" class="text-center">请选择年月查询报表数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 检查管理员权限
+            if (!Utils.checkAdmin()) {
+                return;
+            }
+            
+            // 初始化页面
+            Utils.initPage();
+            
+            // 设置默认日期为今天
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            document.getElementById('daily-date').value = todayStr;
+            document.getElementById('weekly-date').value = todayStr;
+            
+            // 初始化年份下拉框
+            const yearSelect = document.getElementById('monthly-year');
+            const currentYear = today.getFullYear();
+            for (let year = currentYear; year >= currentYear - 5; year--) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year + '年';
+                yearSelect.appendChild(option);
+            }
+            
+            // 设置默认月份为当前月
+            document.getElementById('monthly-month').value = today.getMonth() + 1;
+            
+            // 绑定标签切换事件
+            document.getElementById('daily-tab').addEventListener('click', () => switchTab('daily'));
+            document.getElementById('weekly-tab').addEventListener('click', () => switchTab('weekly'));
+            document.getElementById('monthly-tab').addEventListener('click', () => switchTab('monthly'));
+            
+            // 绑定查询按钮事件
+            document.getElementById('daily-search-btn').addEventListener('click', loadDailyReport);
+            document.getElementById('weekly-search-btn').addEventListener('click', loadWeeklyReport);
+            document.getElementById('monthly-search-btn').addEventListener('click', loadMonthlyReport);
+            
+            // 绑定导出按钮事件
+            document.getElementById('daily-export-btn').addEventListener('click', exportDailyReport);
+            
+            // 加载默认日报表
+            loadDailyReport();
+        });
+        
+        // 切换标签
+        function switchTab(tabId) {
+            // 移除所有标签和面板的活动状态
+            document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.report-panel').forEach(panel => panel.classList.remove('active'));
+            
+            // 激活选中的标签和面板
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+            document.getElementById(`${tabId}-report`).classList.add('active');
+        }
+        
+        // 加载日报表
+        async function loadDailyReport() {
+            const dateInput = document.getElementById('daily-date');
+            const date = dateInput.value;
+            
+            if (!date) {
+                Utils.showNotification('请选择日期', 'warning');
+                return;
+            }
+            
+            try {
+                // 显示加载状态
+                document.getElementById('daily-report-table').innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
+                
+                // 获取报表数据
+                const report = await API.admin.getDailyReport(date);
+                
+                // 显示报表摘要
+                document.getElementById('daily-date-display').textContent = formatDate(date);
+                document.getElementById('daily-total-count').textContent = report.summary.total_charge_count || 0;
+                document.getElementById('daily-total-kwh').textContent = Utils.formatKwh(report.summary.total_charge_kwh || 0);
+                document.getElementById('daily-total-charge-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_charge_fee || 0);
+                document.getElementById('daily-total-service-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_service_fee || 0);
+                document.getElementById('daily-total-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_fee || 0);
+                
+                // 显示报表详情
+                const tableBody = document.getElementById('daily-report-table');
+                
+                if (report.reports && report.reports.length > 0) {
+                    let html = '';
+                    report.reports.forEach(item => {
+                        html += `
+                            <tr>
+                                <td>${item.pile_code}</td>
+                                <td>${item.charge_count}</td>
+                                <td>${Utils.formatMinutes(item.charge_time)}</td>
+                                <td>${Utils.formatKwh(item.charge_kwh)}</td>
+                                <td>¥${Utils.formatMoney(item.charge_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.service_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.total_fee)}</td>
+                            </tr>
+                        `;
+                    });
+                    tableBody.innerHTML = html;
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">没有数据</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载日报表失败:', error);
+                document.getElementById('daily-report-table').innerHTML = '<tr><td colspan="7" class="text-center error">加载失败: ' + error.message + '</td></tr>';
+                
+                // 重置摘要数据
+                document.getElementById('daily-date-display').textContent = formatDate(date);
+                document.getElementById('daily-total-count').textContent = '0';
+                document.getElementById('daily-total-kwh').textContent = '0 kWh';
+                document.getElementById('daily-total-charge-fee').textContent = '¥0.00';
+                document.getElementById('daily-total-service-fee').textContent = '¥0.00';
+                document.getElementById('daily-total-fee').textContent = '¥0.00';
+            }
+        }
+        
+        // 加载周报表
+        async function loadWeeklyReport() {
+            const dateInput = document.getElementById('weekly-date');
+            const date = dateInput.value;
+            
+            if (!date) {
+                Utils.showNotification('请选择日期', 'warning');
+                return;
+            }
+            
+            try {
+                // 显示加载状态
+                document.getElementById('weekly-report-table').innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
+                
+                // 获取报表数据
+                const report = await API.admin.getWeeklyReport(date);
+                
+                // 显示报表摘要
+                document.getElementById('weekly-period-display').textContent = report.period || '--';
+                document.getElementById('weekly-total-count').textContent = report.summary.total_charge_count || 0;
+                document.getElementById('weekly-total-kwh').textContent = Utils.formatKwh(report.summary.total_charge_kwh || 0);
+                document.getElementById('weekly-total-charge-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_charge_fee || 0);
+                document.getElementById('weekly-total-service-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_service_fee || 0);
+                document.getElementById('weekly-total-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_fee || 0);
+                
+                // 显示报表详情
+                const tableBody = document.getElementById('weekly-report-table');
+                
+                if (report.reports && report.reports.length > 0) {
+                    let html = '';
+                    report.reports.forEach(item => {
+                        html += `
+                            <tr>
+                                <td>${item.pile_code}</td>
+                                <td>${item.charge_count}</td>
+                                <td>${Utils.formatMinutes(item.charge_time)}</td>
+                                <td>${Utils.formatKwh(item.charge_kwh)}</td>
+                                <td>¥${Utils.formatMoney(item.charge_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.service_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.total_fee)}</td>
+                            </tr>
+                        `;
+                    });
+                    tableBody.innerHTML = html;
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">没有数据</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载周报表失败:', error);
+                document.getElementById('weekly-report-table').innerHTML = '<tr><td colspan="7" class="text-center error">加载失败: ' + error.message + '</td></tr>';
+                
+                // 重置摘要数据
+                document.getElementById('weekly-period-display').textContent = '--';
+                document.getElementById('weekly-total-count').textContent = '0';
+                document.getElementById('weekly-total-kwh').textContent = '0 kWh';
+                document.getElementById('weekly-total-charge-fee').textContent = '¥0.00';
+                document.getElementById('weekly-total-service-fee').textContent = '¥0.00';
+                document.getElementById('weekly-total-fee').textContent = '¥0.00';
+            }
+        }
+        
+        // 加载月报表
+        async function loadMonthlyReport() {
+            const year = document.getElementById('monthly-year').value;
+            const month = document.getElementById('monthly-month').value;
+            
+            if (!year || !month) {
+                Utils.showNotification('请选择年月', 'warning');
+                return;
+            }
+            
+            try {
+                // 显示加载状态
+                document.getElementById('monthly-report-table').innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
+                
+                // 获取报表数据
+                const report = await API.admin.getMonthlyReport(year, month);
+                
+                // 显示报表摘要
+                document.getElementById('monthly-period-display').textContent = `${year}年${month}月`;
+                document.getElementById('monthly-total-count').textContent = report.summary.total_charge_count || 0;
+                document.getElementById('monthly-total-kwh').textContent = Utils.formatKwh(report.summary.total_charge_kwh || 0);
+                document.getElementById('monthly-total-charge-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_charge_fee || 0);
+                document.getElementById('monthly-total-service-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_service_fee || 0);
+                document.getElementById('monthly-total-fee').textContent = '¥' + Utils.formatMoney(report.summary.total_fee || 0);
+                
+                // 显示报表详情
+                const tableBody = document.getElementById('monthly-report-table');
+                
+                if (report.reports && report.reports.length > 0) {
+                    let html = '';
+                    report.reports.forEach(item => {
+                        html += `
+                            <tr>
+                                <td>${item.pile_code}</td>
+                                <td>${item.charge_count}</td>
+                                <td>${Utils.formatMinutes(item.charge_time)}</td>
+                                <td>${Utils.formatKwh(item.charge_kwh)}</td>
+                                <td>¥${Utils.formatMoney(item.charge_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.service_fee)}</td>
+                                <td>¥${Utils.formatMoney(item.total_fee)}</td>
+                            </tr>
+                        `;
+                    });
+                    tableBody.innerHTML = html;
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">没有数据</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载月报表失败:', error);
+                document.getElementById('monthly-report-table').innerHTML = '<tr><td colspan="7" class="text-center error">加载失败: ' + error.message + '</td></tr>';
+                
+                // 重置摘要数据
+                document.getElementById('monthly-period-display').textContent = `${year}年${month}月`;
+                document.getElementById('monthly-total-count').textContent = '0';
+                document.getElementById('monthly-total-kwh').textContent = '0 kWh';
+                document.getElementById('monthly-total-charge-fee').textContent = '¥0.00';
+                document.getElementById('monthly-total-service-fee').textContent = '¥0.00';
+                document.getElementById('monthly-total-fee').textContent = '¥0.00';
+            }
+        }
+        
+        // 导出日报表CSV
+        async function exportDailyReport() {
+            const dateInput = document.getElementById('daily-date');
+            const date = dateInput.value;
+            
+            if (!date) {
+                Utils.showNotification('请选择日期', 'warning');
+                return;
+            }
+            
+            try {
+                // 构建下载URL
+                const url = `${API_BASE_URL}/admin/reports/daily/${date}?export_csv=true`;
+                
+                // 创建下载链接并点击
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `daily_report_${date}.csv`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                Utils.showNotification('报表导出成功', 'success');
+            } catch (error) {
+                console.error('导出报表失败:', error);
+                Utils.showNotification('导出报表失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 格式化日期
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+        }
+    </script>
+    
+    <style>
+        /* 报表页面样式 */
+        .report-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn:hover {
+            color: #1976d2;
+        }
+        
+        .tab-btn.active {
+            color: #1976d2;
+            border-bottom-color: #1976d2;
+            font-weight: bold;
+        }
+        
+        .report-panel {
+            display: none;
+        }
+        
+        .report-panel.active {
+            display: block;
+        }
+        
+        .date-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .date-selector .form-control {
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .report-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .summary-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        
+        .error {
+            color: #f44336;
+        }
+    </style>
+</body>
+</html> 
