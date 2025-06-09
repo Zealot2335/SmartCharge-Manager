@@ -11,7 +11,7 @@ database:
   host: localhost
   port: 3306
   user: se_test
-  password: iluvse
+  password: 20031216cyh
   database: smart_charge
   charset: utf8mb4
 

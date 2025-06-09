@@ -19,7 +19,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # 依赖函数，用于获取数据库会话
-def get_db():
+def get_db() -> Session:
     """
     获取数据库会话，在FastAPI依赖注入中使用
     
