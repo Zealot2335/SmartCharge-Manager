@@ -215,7 +215,8 @@ INSERT INTO t_config (config_key, config_value, description) VALUES
 
 -- 初始化管理员账户
 INSERT INTO t_user (user_id, username, password, role) VALUES 
-('admin', 'admin', MD5('admin123'), 'ADMIN');
+('admin', 'admin', MD5('admin123'), 'ADMIN'),
+('iluvse', 'iluvse', MD5('iluvse'), 'ADMIN');
 
 -- 初始化测试用户
 INSERT INTO t_user (user_id, username, password, role) VALUES 

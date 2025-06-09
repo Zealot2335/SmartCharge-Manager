@@ -10,6 +10,7 @@ BACKEND_URL = "http://localhost:8000"
 FRONTEND_URL = "http://localhost:8000"
 ADMIN_USER = {"username": "admin", "password": "admin"}
 NORMAL_USER = {"username": "user", "password": "admin"}
+NEW_USER = {"username": "newuser", "password": "newpassword"}
 
 def print_header(message):
     """打印带格式的标题"""
@@ -94,6 +95,23 @@ def test_auth():
         user_token = None
     
     return admin_token, user_token
+
+def test_register():
+    """测试注册功能"""
+    print_header("测试注册功能")
+    
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/auth/register",
+            json=NEW_USER
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ 注册成功: {response.json()}")
+        else:
+            print(f"❌ 注册失败: {response.status_code}")
+    except Exception as e:
+        print(f"❌ 注册异常: {str(e)}")
 
 def test_admin_apis(token):
     """测试管理员API"""
@@ -252,7 +270,8 @@ def test_frontend():
         "/",
         "/login.html",
         "/user/requests.html",
-        "/admin/index.html"
+        "/admin/index.html",
+        "/register.html"  # 新增注册页面测试
     ]
     
     for page in pages:
@@ -286,6 +305,9 @@ def main():
         print("\n❌ 后端连接失败，请确保后端服务已启动")
         return
     
+    # 测试注册功能
+    test_register()
+    
     # 测试认证
     admin_token, user_token = test_auth()
     
@@ -304,4 +326,4 @@ def main():
     print("\n✅ 测试完成")
 
 if __name__ == "__main__":
-    main() 
+    main()
