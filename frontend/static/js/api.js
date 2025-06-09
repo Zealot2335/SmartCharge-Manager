@@ -228,6 +228,26 @@ const charging = {
     },
     
     /**
+     * 修改充电模式
+     * @param {number} requestId - 请求ID
+     * @param {string} newMode - 新的充电模式 (FAST/SLOW)
+     * @returns {Promise} 更新后的请求对象
+     */
+    changeChargeMode: (requestId, newMode) => {
+        return request(`/charging/requests/${requestId}/mode`, 'PUT', { mode: newMode });
+    },
+    
+    /**
+     * 修改充电量
+     * @param {number} requestId - 请求ID
+     * @param {number} newAmount - 新的充电量 (kWh)
+     * @returns {Promise} 更新后的请求对象
+     */
+    changeChargeAmount: (requestId, newAmount) => {
+        return request(`/charging/requests/${requestId}/amount`, 'PATCH', { amount_kwh: newAmount });
+    },
+    
+    /**
      * 获取队列信息
      * @param {string} mode - 充电模式 (FAST/SLOW)
      * @returns {Promise} 队列信息

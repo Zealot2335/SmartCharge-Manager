@@ -116,6 +116,12 @@ class ChargeRequestUpdate(BaseModel):
     mode: Optional[ChargeMode] = None
     amount_kwh: Optional[float] = None
 
+class ChargeModeUpdateRequest(BaseModel):
+    mode: ChargeMode
+
+class ChargeAmountUpdateRequest(BaseModel):
+    amount_kwh: float = Field(..., gt=0, description="新的充电量 (kWh)")
+
 class ChargeRequestInDB(ChargeRequestBase, TimeStampModel):
     id: int
     user_id: str

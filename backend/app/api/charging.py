@@ -8,7 +8,8 @@ from backend.app.db.database import get_db
 from backend.app.db.models import User, CarRequest, ChargePile, ChargeSession
 from backend.app.db.schemas import (
     ChargeRequestCreate, ChargeRequestUpdate, ChargeRequest, 
-    ChargeRequestDetail, ChargeMode, RequestStatus
+    ChargeRequestDetail, ChargeMode, RequestStatus, ChargeModeUpdateRequest,
+    ChargeAmountUpdateRequest
 )
 from backend.app.core.auth import get_current_user
 from backend.app.services.scheduler import ChargingScheduler
@@ -412,6 +413,136 @@ async def update_charge_request(
     db.refresh(request)
     
     return request
+
+@router.put("/requests/{request_id}/mode", response_model=ChargeRequest)
+async def change_charge_mode(
+    request_id: int,
+    mode_update: ChargeModeUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    修改充电请求的模式 (仅限在等候区)
+    """
+    logger.info(f"--- 正在修改充电请求 {request_id} 的模式为 {mode_update.mode} ---")
+
+    # 使用 with_for_update 来锁定行，防止并发问题
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).with_for_update().first()
+
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="充电请求不存在"
+        )
+
+    # 检查状态是否为 'WAITING'
+    if request.status != RequestStatus.WAITING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"只能修改处于'等候区(WAITING)'状态的请求，当前状态为 {request.status}"
+        )
+        
+    if request.mode == mode_update.mode.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"请求已经是 {mode_update.mode.value} 模式，无需修改"
+        )
+
+    # 更新模式并重新生成排队号
+    try:
+        old_mode = request.mode
+        new_mode = mode_update.mode
+        
+        logger.info(f"请求 {request.id} 从模式 {old_mode} 切换到 {new_mode.value}")
+        
+        # 更新模式
+        request.mode = new_mode.value
+        
+        # 重新生成排队号
+        new_queue_number = ChargingScheduler.generate_queue_number(db, new_mode)
+        request.queue_number = new_queue_number
+        
+        request.request_time = datetime.now()
+        
+        db.commit()
+        db.refresh(request)
+        
+        logger.info(f"请求 {request_id} 模式修改成功，新排队号: {request.queue_number}")
+        
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return request
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"修改充电模式失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修改充电模式失败: {str(e)}"
+        )
+
+@router.patch("/requests/{request_id}/amount", response_model=ChargeRequest)
+async def change_charge_amount(
+    request_id: int,
+    amount_update: ChargeAmountUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    修改请求的充电量 (仅限在等候区)
+    """
+    logger.info(f"--- 正在修改充电请求 {request_id} 的充电量为 {amount_update.amount_kwh} kWh ---")
+
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).with_for_update().first()
+
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="充电请求不存在"
+        )
+
+    if request.status != RequestStatus.WAITING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"只能修改处于'等候区(WAITING)'状态的请求，当前状态为 {request.status}"
+        )
+
+    if amount_update.amount_kwh > request.battery_capacity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"充电量 ({amount_update.amount_kwh} kWh) 不能超过电池容量 ({request.battery_capacity} kWh)"
+        )
+    
+    if amount_update.amount_kwh == request.amount_kwh:
+        return request
+
+    try:
+        old_amount = request.amount_kwh
+        new_amount = amount_update.amount_kwh
+        
+        request.amount_kwh = new_amount
+        request.updated_at = datetime.now()
+        
+        db.commit()
+        db.refresh(request)
+        
+        logger.info(f"请求 {request_id} 充电量从 {old_amount} kWh 修改成功为 {new_amount} kWh")
+        
+        return request
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"修改充电量失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修改充电量失败: {str(e)}"
+        )
 
 @router.delete("/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_charge_request(
