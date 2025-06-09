@@ -89,7 +89,27 @@ const auth = {
      * @returns {Promise} 登录结果
      */
     login: async (username, password) => {
-        const result = await request('/auth/login', 'POST', { username, password });
+        // --- 修复开始 ---
+        // 后端 OAuth2PasswordRequestForm 需要 application/x-www-form-urlencoded 格式
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || '登录失败');
+        }
+
+        const result = await response.json();
+        // --- 修复结束 ---
         
         // 存储token和用户信息
         if (result.access_token) {
@@ -135,7 +155,7 @@ const auth = {
      * @returns {string} 用户角色
      */
     getUserRole: () => {
-        return userRole;
+        return localStorage.getItem('user_role');
     },
     
     /**
@@ -143,7 +163,7 @@ const auth = {
      * @returns {boolean} 是否是管理员
      */
     isAdmin: () => {
-        return userRole === 'ADMIN';
+        return localStorage.getItem('user_role') === 'ADMIN';
     }
 };
 
@@ -208,12 +228,40 @@ const charging = {
     },
     
     /**
+     * 修改充电模式
+     * @param {number} requestId - 请求ID
+     * @param {string} newMode - 新的充电模式 (FAST/SLOW)
+     * @returns {Promise} 更新后的请求对象
+     */
+    changeChargeMode: (requestId, newMode) => {
+        return request(`/charging/requests/${requestId}/mode`, 'PUT', { mode: newMode });
+    },
+    
+    /**
+     * 修改充电量
+     * @param {number} requestId - 请求ID
+     * @param {number} newAmount - 新的充电量 (kWh)
+     * @returns {Promise} 更新后的请求对象
+     */
+    changeChargeAmount: (requestId, newAmount) => {
+        return request(`/charging/requests/${requestId}/amount`, 'PATCH', { amount_kwh: newAmount });
+    },
+    
+    /**
      * 获取队列信息
      * @param {string} mode - 充电模式 (FAST/SLOW)
      * @returns {Promise} 队列信息
      */
     getQueueInfo: (mode) => {
         return request(`/charging/queue/${mode}`, 'GET');
+    },
+    
+    /**
+     * 获取等候区状态
+     * @returns {Promise<any>}
+     */
+    getWaitingAreaStatus: async () => {
+        return await request('/charging/waiting_area');
     },
     
     /**
@@ -242,11 +290,12 @@ const billing = {
     
     /**
      * 获取账单详情
-     * @param {number} billId - 账单ID
+     * @param {number} sessionId - 会话ID
      * @returns {Promise} 账单详情
      */
-    getBillDetails: (billId) => {
-        return request(`/billing/bills/${billId}`, 'GET');
+    getBillDetails: (sessionId) => {
+        console.log(`Getting bill details for session ID: ${sessionId}`);
+        return request(`/billing/bills/${sessionId}`, 'GET');
     },
     
     /**
@@ -268,17 +317,26 @@ const admin = {
      * @returns {Promise} 充电桩列表
      */
     getPiles: () => {
-        return request('/admin/piles', 'GET');
+        return request('/admin/pile', 'GET');
     },
     
     /**
-     * 更新充电桩状态
-     * @param {number} pileId - 充电桩ID
-     * @param {Object} updateData - 更新数据
+     * 启动充电桩
+     * @param {string} pileCode - 充电桩编号
      * @returns {Promise} 更新结果
      */
-    updatePileStatus: (pileId, updateData) => {
-        return request(`/admin/piles/${pileId}`, 'PATCH', updateData);
+    powerOnPile: (pileCode) => {
+        return request(`/admin/pile/${pileCode}/poweron`, 'POST');
+    },
+    
+    /**
+     * 关闭充电桩
+     * @param {string} pileCode - 充电桩编号
+     * @param {string} strategy - 故障恢复策略 (priority或time_order)
+     * @returns {Promise} 更新结果
+     */
+    shutdownPile: (pileCode, strategy = "priority") => {
+        return request(`/admin/pile/${pileCode}/shutdown?strategy=${strategy}`, 'POST');
     },
     
     /**
@@ -348,6 +406,25 @@ const admin = {
     },
     
     /**
+     * 获取周报表
+     * @param {string} dateInWeek - 周内任意日期 (YYYY-MM-DD)
+     * @returns {Promise} 报表数据
+     */
+    getWeeklyReport: (dateInWeek) => {
+        return request(`/admin/reports/weekly?date_in_week=${dateInWeek}`, 'GET');
+    },
+    
+    /**
+     * 获取月报表
+     * @param {number} year - 年份
+     * @param {number} month - 月份 (1-12)
+     * @returns {Promise} 报表数据
+     */
+    getMonthlyReport: (year, month) => {
+        return request(`/admin/reports/monthly?year=${year}&month=${month}`, 'GET');
+    },
+    
+    /**
      * 获取故障日志
      * @returns {Promise} 故障日志列表
      */
@@ -371,7 +448,33 @@ const admin = {
      */
     resolveFault: (faultId) => {
         return request(`/admin/faults/${faultId}/resolve`, 'POST');
-    }
+    },
+    
+    /**
+     * 获取当前调度策略
+     * @returns {Promise} 当前调度策略
+     */
+    getScheduleStrategy: () => {
+        return request('/admin/schedule-strategy', 'GET');
+    },
+    
+    /**
+     * 更新调度策略
+     * @param {string} strategy - 调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)
+     * @param {number} bulkSize - 批量调度时的车辆数量，仅在bulk_mode模式下有效
+     * @returns {Promise} 更新结果
+     */
+    updateScheduleStrategy: (strategy, bulkSize = 10) => {
+        return request(`/admin/schedule-strategy?strategy=${strategy}&bulk_size=${bulkSize}`, 'PATCH');
+    },
+
+    /**
+     * 获取等候区状态
+     * @returns {Promise<any>} 等候区状态信息
+     */
+    getWaitingAreaStatus: async () => {
+        return await request('/admin/waiting_area');
+    },
 };
 
 /**

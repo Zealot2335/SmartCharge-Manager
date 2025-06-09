@@ -207,21 +207,33 @@ class ChargingService:
         获取充电状态
         返回充电进度、已充电量、已充电时间等信息
         """
+        logger = logging.getLogger(__name__)
+        logger.info(f"获取充电状态: 请求ID={request_id}")
+        
         # 查询充电请求
         request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
         if not request:
-            return {"error": "充电请求不存在"}
+            logger.warning(f"充电请求不存在: ID={request_id}")
+            return {"error": "充电请求不存在", "status": "ERROR"}
             
         # 基本信息
         result = {
             "request_id": request.id,
             "status": request.status,
             "mode": request.mode,
-            "amount_kwh": request.amount_kwh
+            "amount_kwh": request.amount_kwh,
+            "progress": 0,  # 添加默认值
+            "charging_progress": 0,  # 添加默认值
+            "charged_kwh": 0,  # 添加默认值
+            "remaining_kwh": request.amount_kwh,  # 添加默认值
+            "charging_minutes": 0,  # 添加默认值
+            "estimated_remaining_minutes": 0,  # 添加默认值
+            "estimated_fee": 0  # 添加默认值
         }
         
         # 如果正在充电，计算充电进度
         if request.status == RequestStatus.CHARGING and request.start_time:
+            logger.info(f"处理充电中请求: ID={request_id}")
             # 查询充电桩
             pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
             if pile:
@@ -238,38 +250,109 @@ class ChargingService:
                 result["charged_kwh"] = min(charged_kwh, request.amount_kwh)
                 
                 # 充电进度
-                result["charging_progress"] = min(charged_kwh / request.amount_kwh * 100, 100)
+                progress = min(charged_kwh / request.amount_kwh * 100, 100) if request.amount_kwh > 0 else 0
+                result["charging_progress"] = progress
+                result["progress"] = progress
                 
                 # 预计剩余时间(分钟)
                 if charged_kwh < request.amount_kwh:
                     remaining_kwh = request.amount_kwh - charged_kwh
-                    remaining_minutes = remaining_kwh / power_per_minute
-                    result["remaining_minutes"] = remaining_minutes
+                    result["remaining_kwh"] = remaining_kwh
+                    remaining_minutes = remaining_kwh / power_per_minute if power_per_minute > 0 else 0
+                    result["estimated_remaining_minutes"] = remaining_minutes
                     result["estimated_end_time"] = datetime.now() + timedelta(minutes=remaining_minutes)
+                    
+                    # 预估费用
+                    try:
+                        # 简化的费用估算，仅作显示用
+                        from backend.app.services.billing import BillingService
+                        charge_fee, service_fee, total_fee = BillingService.calculate_charging_cost(
+                            db,
+                            request.start_time,
+                            datetime.now() + timedelta(minutes=remaining_minutes),
+                            request.amount_kwh
+                        )
+                        result["estimated_fee"] = total_fee
+                    except Exception as e:
+                        logger.error(f"计算预估费用失败: {e}")
+                        result["estimated_fee"] = 0
                 else:
-                    result["remaining_minutes"] = 0
+                    result["remaining_kwh"] = 0
+                    result["estimated_remaining_minutes"] = 0
                     result["estimated_end_time"] = datetime.now()
+            else:
+                logger.warning(f"充电桩不存在: 请求ID={request_id}, 充电桩ID={request.pile_id}")
         
         # 如果已完成，返回充电会话信息
         elif request.status == RequestStatus.FINISHED:
+            logger.info(f"处理已完成请求: ID={request_id}")
             # 查询充电会话
             session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
             if session:
                 result["session_id"] = session.id
                 result["charged_kwh"] = session.charged_kwh
-                result["charging_time"] = session.charging_time
+                result["charging_minutes"] = session.charging_time
                 result["charge_fee"] = session.charge_fee
                 result["service_fee"] = session.service_fee
                 result["total_fee"] = session.total_fee
                 result["start_time"] = session.start_time
                 result["end_time"] = session.end_time
+                result["progress"] = 100
+                result["charging_progress"] = 100
+                result["remaining_kwh"] = 0
+                result["estimated_remaining_minutes"] = 0
+                result["estimated_fee"] = session.total_fee
                 
                 # 查询详单
                 bill_detail = db.query(BillDetail).filter(BillDetail.session_id == session.id).first()
                 if bill_detail:
                     result["detail_number"] = bill_detail.detail_number
                     result["bill_id"] = bill_detail.bill_id
+            else:
+                logger.warning(f"充电会话不存在: 请求ID={request_id}")
+        # 处理已取消但曾经充电过的请求
+        elif request.status == RequestStatus.CANCELED and request.start_time:
+            logger.info(f"处理已取消但曾经充电过的请求: ID={request_id}")
+            # 查询充电会话
+            session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+            if session:
+                result["session_id"] = session.id
+                result["charged_kwh"] = session.charged_kwh
+                result["charging_minutes"] = session.charging_time
+                result["charge_fee"] = session.charge_fee
+                result["service_fee"] = session.service_fee
+                result["total_fee"] = session.total_fee
+                result["start_time"] = session.start_time
+                result["end_time"] = session.end_time
+                
+                # 计算充电进度
+                progress = min(session.charged_kwh / request.amount_kwh * 100, 100) if request.amount_kwh > 0 else 0
+                result["progress"] = progress
+                result["charging_progress"] = progress
+                
+                # 查询详单
+                bill_detail = db.query(BillDetail).filter(BillDetail.session_id == session.id).first()
+                if bill_detail:
+                    result["detail_number"] = bill_detail.detail_number
+                    result["bill_id"] = bill_detail.bill_id
+                else:
+                    # 如果没有找到详单，尝试生成一个
+                    logger.info(f"尝试为已取消的充电会话 {session.id} 生成账单")
+                    bill_detail = ChargingService.generate_bill(db, session)
+                    if bill_detail:
+                        db.commit()
+                        result["detail_number"] = bill_detail.detail_number
+                        result["bill_id"] = bill_detail.bill_id
+            else:
+                logger.warning(f"充电会话不存在: 请求ID={request_id}")
+        elif request.status in [RequestStatus.WAITING, RequestStatus.QUEUING]:
+            logger.info(f"处理等待/排队中请求: ID={request_id}, 状态={request.status}")
+            # 对于等待或排队中的请求，保持默认值
+            pass
+        else:
+            logger.info(f"处理其他状态请求: ID={request_id}, 状态={request.status}")
         
+        logger.debug(f"最终状态结果: {result}")
         return result
     
     @staticmethod

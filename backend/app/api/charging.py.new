@@ -1,0 +1,578 @@
+﻿from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
+import logging
+
+from backend.app.db.database import get_db
+from backend.app.db.models import User, CarRequest, ChargePile, ChargeSession
+from backend.app.db.schemas import (
+    ChargeRequestCreate, ChargeRequestUpdate, ChargeRequest, 
+    ChargeRequestDetail, ChargeMode, RequestStatus
+)
+from backend.app.core.auth import get_current_user
+from backend.app.services.scheduler import ChargingScheduler
+from backend.app.services.billing import BillingService
+from backend.app.services.charging_service import ChargingService
+from backend.app.core.config import get_station_config
+
+router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+@router.get("/waiting_area", response_model=Dict[str, Any])
+async def get_waiting_area_status(db: Session = Depends(get_db)):
+    """鑾峰彇绛夊€欏尯鐘舵€?""
+    logger.info("--- Enter get_waiting_area_status ---")
+    try:
+        logger.info("Step 1: Getting station config.")
+        config = get_station_config()
+        capacity = config.get("WaitingAreaSize", 6)
+        logger.info(f"Step 1 successful. Capacity is {capacity}.")
+
+        logger.info("Step 2: Counting fast waiting cars.")
+        fast_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.FAST)
+        logger.info(f"Step 2 successful. Fast waiting cars: {fast_waiting}.")
+
+        logger.info("Step 3: Counting slow waiting cars.")
+        slow_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.SLOW)
+        logger.info(f"Step 3 successful. Slow waiting cars: {slow_waiting}.")
+        
+        total_waiting = fast_waiting + slow_waiting
+        
+        response_data = {
+            "waiting_count": total_waiting,
+            "capacity": capacity,
+            "fast_queue": fast_waiting,
+            "slow_queue": slow_waiting
+        }
+        logger.info(f"--- Exiting get_waiting_area_status with data: {response_data} ---")
+        return response_data
+    except Exception as e:
+        logger.error(f"!!!!!! EXCEPTION in get_waiting_area_status: {e}", exc_info=True)
+        # 閲嶆柊鎶涘嚭HTTP寮傚父锛屼互渚縁astAPI鍙互澶勭悊瀹?        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+@router.post("/request", response_model=ChargeRequest)
+async def create_charge_request(
+    request: ChargeRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鎻愪氦鍏呯數璇锋眰"""
+    try:
+        # 妫€鏌ョ瓑鍊欏尯鏄惁宸叉弧
+        if not ChargingScheduler.check_waiting_area_capacity(db):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="绛夊€欏尯宸叉弧锛岃绋嶅悗鍐嶈瘯"
+            )
+        
+        # 鐢熸垚鎺掗槦鍙风爜
+        queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
+        
+        # 鍒涘缓鍏呯數璇锋眰
+        db_request = CarRequest(
+            user_id=current_user.user_id,
+            queue_number=queue_number,
+            mode=request.mode,
+            amount_kwh=request.amount_kwh,
+            battery_capacity=request.battery_capacity,
+            status=RequestStatus.WAITING,
+            request_time=datetime.now()
+        )
+        
+        db.add(db_request)
+        db.commit()
+        db.refresh(db_request)
+        
+        # 鎻愪氦浜嬪姟鍚庡啀灏濊瘯璋冨害
+        logger.info(f"New charge request {db_request.id} created, attempting to schedule.")
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return db_request
+    except Exception as e:
+        logger.error(f"Error creating charge request: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"鎻愪氦鍏呯數璇锋眰澶辫触: {str(e)}"
+        )
+
+@router.get("/requests", response_model=List[ChargeRequest])
+async def get_user_requests(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鑾峰彇鐢ㄦ埛鐨勫厖鐢佃姹傚垪琛?""
+    query = db.query(CarRequest).filter(CarRequest.user_id == current_user.user_id)
+    
+    if status:
+        query = query.filter(CarRequest.status == status)
+    
+    requests = query.order_by(CarRequest.request_time.desc()).all()
+    return requests
+
+@router.get("/{request_id}", response_model=ChargeRequestDetail)
+async def get_charge_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鑾峰彇鍏呯數璇锋眰璇︽儏"""
+    logger.info(f"寮€濮嬭幏鍙栧厖鐢佃姹傝鎯? 璇锋眰ID={request_id}, 鐢ㄦ埛ID={current_user.user_id}")
+    try:
+        # 鏌ヨ璇锋眰
+        logger.debug(f"鏌ヨ鍏呯數璇锋眰: ID={request_id}")
+        request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).first()
+    
+    if not request:
+            logger.warning(f"鍏呯數璇锋眰涓嶅瓨鍦? ID={request_id}, 鐢ㄦ埛ID={current_user.user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="鍏呯數璇锋眰涓嶅瓨鍦?
+        )
+    
+        logger.debug(f"鎵惧埌鍏呯數璇锋眰: ID={request_id}, 鐘舵€?{request.status}")
+        
+    # 鍒涘缓鍝嶅簲鏁版嵁
+        logger.debug(f"鍒涘缓鍝嶅簲鏁版嵁妯″瀷")
+    result = ChargeRequestDetail.from_orm(request)
+        logger.debug(f"鍝嶅簲鏁版嵁妯″瀷鍒涘缓鎴愬姛: {result}")
+        
+        # 濡傛灉鏈夊厖鐢垫々ID锛屾煡璇㈠厖鐢垫々淇℃伅
+        if request.pile_id:
+            logger.debug(f"璇锋眰鍏宠仈鍏呯數妗? ID={request.pile_id}")
+            try:
+                pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                if pile:
+                    logger.debug(f"鎵惧埌鍏呯數妗? 缂栧彿={pile.code}")
+                    result.pile_code = pile.code
+                else:
+                    logger.warning(f"鏈壘鍒板厖鐢垫々: ID={request.pile_id}")
+            except Exception as e:
+                logger.error(f"鑾峰彇鍏呯數妗╀俊鎭け璐? {e}", exc_info=True)
+        else:
+            logger.debug(f"璇锋眰鏈叧鑱斿厖鐢垫々")
+        
+        # 濡傛灉鐘舵€佹槸鍏呯數涓垨宸插畬鎴愶紝鏌ヨ浼氳瘽ID
+        if request.status in [RequestStatus.CHARGING, RequestStatus.FINISHED]:
+            logger.debug(f"鏌ヨ鍏呯數浼氳瘽: 璇锋眰ID={request.id}")
+            try:
+                session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+                if session:
+                    logger.debug(f"鎵惧埌鍏呯數浼氳瘽: ID={session.id}")
+                    result.session_id = session.id
+                else:
+                    logger.warning(f"鏈壘鍒板厖鐢典細璇? 璇锋眰ID={request.id}")
+            except Exception as e:
+                logger.error(f"鑾峰彇浼氳瘽ID澶辫触: {e}", exc_info=True)
+    
+    # 璁＄畻绛夊緟浜烘暟
+    if request.status == RequestStatus.WAITING:
+            logger.debug(f"澶勭悊绛夊€欏尯绛夊緟鐘舵€?)
+            try:
+        # 璁＄畻鍚屾ā寮忎笅鍦ㄧ瓑鍊欏尯绛夊緟鐨勮溅杈嗘暟閲忥紙鎺掑湪鍓嶉潰鐨勶級
+        wait_count = (
+            db.query(CarRequest)
+            .filter(CarRequest.mode == request.mode)
+            .filter(CarRequest.status == RequestStatus.WAITING)
+            .filter(CarRequest.queue_number < request.queue_number)
+            .count()
+        )
+                logger.debug(f"绛夊€欏尯鍓嶉潰绛夊緟杞﹁締鏁? {wait_count}")
+        result.wait_count = wait_count
+        
+        # 浼扮畻绛夊緟鏃堕棿
+        # 绠€鍗曚及璁★細鍋囪鎵€鏈夊厖鐢垫々閮芥湁杞︼紝鏂版潵鐨勮溅闇€瑕佺瓑寰呮渶鍚庝竴涓綅缃?                logger.debug(f"鑾峰彇鍙敤鍏呯數妗? 妯″紡={request.mode}")
+                piles = ChargingScheduler.get_available_piles(db, request.mode)
+                pile_count = len(piles) if piles else 0
+                logger.debug(f"鍙敤鍏呯數妗╂暟閲? {pile_count}")
+                
+        if pile_count > 0:
+            # 鍋囪姣忚締杞﹀钩鍧囧厖鐢垫椂闂翠负 amount_kwh / power
+            power = 30.0 if request.mode == ChargeMode.FAST else 7.0
+            avg_charging_time = request.amount_kwh / power * 60  # 杞崲涓哄垎閽?                    logger.debug(f"骞冲潎鍏呯數鏃堕棿: {avg_charging_time}鍒嗛挓")
+            
+            # 浼拌绛夊緟鏃堕棿 = 鍓嶉潰绛夊緟鐨勮溅杈嗘暟 / 鍏呯數妗╂暟 * 骞冲潎鍏呯數鏃堕棿
+            result.estimated_wait_time = (wait_count / pile_count) * avg_charging_time
+                    logger.debug(f"浼拌绛夊緟鏃堕棿: {result.estimated_wait_time}鍒嗛挓")
+            
+            # 浼拌瀹屾垚鏃堕棿
+            if result.estimated_wait_time:
+                result.estimated_finish_time = datetime.now() + timedelta(minutes=result.estimated_wait_time)
+                        logger.debug(f"浼拌瀹屾垚鏃堕棿: {result.estimated_finish_time}")
+            except Exception as e:
+                logger.error(f"璁＄畻绛夊€欏尯绛夊緟鏃堕棿澶辫触: {e}", exc_info=True)
+                # 璁剧疆榛樿鍊硷紝涓嶅奖鍝嶆暣浣撹繑鍥?                result.wait_count = 0
+                result.estimated_wait_time = None
+                result.estimated_finish_time = None
+    
+    elif request.status in [RequestStatus.QUEUING, RequestStatus.CHARGING]:
+        if request.pile_id:
+                logger.debug(f"澶勭悊鍏呯數妗╅槦鍒楃姸鎬? 鐘舵€?{request.status}")
+                try:
+                    pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                    if pile:
+                        power = pile.power
+                        logger.debug(f"鍏呯數妗╁姛鐜? {power}")
+                    else:
+                        power = 30.0
+                        logger.warning(f"鏈壘鍒板厖鐢垫々锛屼娇鐢ㄩ粯璁ゅ姛鐜? {power}")
+            
+                    # 濡傛灉鏄鍦ㄥ厖鐢电殑杞﹁締
+                    if request.status == RequestStatus.CHARGING and request.start_time:
+                        logger.debug(f"澶勭悊鍏呯數涓姸鎬?)
+                result.wait_count = 0
+                result.estimated_wait_time = 0
+                
+                        # 璁＄畻瀹炴椂鍏呯數鏁版嵁
+                        charging_duration = datetime.now() - request.start_time
+                        result.charging_minutes = charging_duration.total_seconds() / 60
+                        logger.debug(f"鍏呯數鏃堕暱: {result.charging_minutes}鍒嗛挓")
+                        
+                        power_per_minute = power / 60
+                        result.charged_kwh = min(power_per_minute * result.charging_minutes, request.amount_kwh)
+                        logger.debug(f"宸插厖鐢甸噺: {result.charged_kwh}kWh")
+                        
+                        remaining_kwh = request.amount_kwh - result.charged_kwh
+                        result.remaining_minutes = (remaining_kwh / power) * 60 if power > 0 else 0
+                        logger.debug(f"鍓╀綑鏃堕棿: {result.remaining_minutes}鍒嗛挓")
+                        
+                        result.progress = (result.charged_kwh / request.amount_kwh) * 100 if request.amount_kwh > 0 else 100
+                        logger.debug(f"鍏呯數杩涘害: {result.progress}%")
+                
+                # 浼拌瀹屾垚鏃堕棿
+                        result.estimated_finish_time = datetime.now() + timedelta(minutes=result.remaining_minutes)
+                        logger.debug(f"浼拌瀹屾垚鏃堕棿: {result.estimated_finish_time}")
+                    
+                    else: # 鎺掗槦涓殑杞﹁締
+                        logger.debug(f"澶勭悊鎺掗槦涓姸鎬?)
+                        try:
+                # 璁＄畻鍓嶉潰鎺掗槦鐨勮溅杈嗘暟
+                result.wait_count = (
+                    db.query(CarRequest)
+                    .filter(CarRequest.pile_id == request.pile_id)
+                                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                    .filter(CarRequest.queue_position < request.queue_position)
+                    .count()
+                )
+                            logger.debug(f"鍓嶉潰鎺掗槦鐨勮溅杈嗘暟: {result.wait_count}")
+                            
+                            # 浼扮畻鍦ㄥ畠鍓嶉潰鐨勬墍鏈夎溅杈嗙殑鎬诲厖鐢垫椂闂?                            logger.debug(f"璁＄畻鍓嶉潰杞﹁締鎬荤瓑寰呮椂闂? 鍏呯數妗?{request.pile_id}, 闃熷垪浣嶇疆={request.queue_position}")
+                            wait_time_minutes = ChargingScheduler.get_pile_queue_waiting_time(db, request.pile_id, request.queue_position)
+                            logger.debug(f"鍓嶉潰杞﹁締鎬荤瓑寰呮椂闂? {wait_time_minutes}鍒嗛挓")
+                            result.estimated_wait_time = wait_time_minutes
+                            
+                            # 鍔犱笂鑷繁鐨勫厖鐢垫椂闂?                            own_charging_time = (request.amount_kwh / power) * 60 if power > 0 else 0
+                            logger.debug(f"鑷繁鍏呯數鏃堕棿: {own_charging_time}鍒嗛挓")
+                            result.estimated_finish_time = datetime.now() + timedelta(minutes=(wait_time_minutes + own_charging_time))
+                            logger.debug(f"浼拌瀹屾垚鏃堕棿: {result.estimated_finish_time}")
+                        except Exception as e:
+                            logger.error(f"璁＄畻鍏呯數妗╃瓑寰呮椂闂村け璐? {e}", exc_info=True)
+                            # 璁剧疆榛樿鍊硷紝涓嶅奖鍝嶆暣浣撹繑鍥?                            result.wait_count = 0
+                            result.estimated_wait_time = None
+                            result.estimated_finish_time = None
+                except Exception as e:
+                    logger.error(f"澶勭悊鍏呯數妗╅槦鍒椾俊鎭け璐? {e}", exc_info=True)
+        
+        logger.info(f"鎴愬姛鑾峰彇鍏呯數璇锋眰璇︽儏: 璇锋眰ID={request_id}")
+        
+        # 灏嗙粨鏋滆浆鎹负瀛楀吀锛屾鏌ユ槸鍚︽湁浠讳綍缂哄け鐨勫繀闇€瀛楁
+        result_dict = result.dict()
+        logger.debug(f"鏈€缁堝搷搴旀暟鎹? {result_dict}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"鑾峰彇鍏呯數璇锋眰璇︽儏澶辫触: 璇锋眰ID={request_id}, 鐢ㄦ埛ID={current_user.user_id}, 閿欒: {e}", exc_info=True)
+        
+        # 灏濊瘯杩斿洖鍩烘湰鏁版嵁锛岄伩鍏?00閿欒
+        try:
+            logger.warning("灏濊瘯鎻愪緵澶囩敤鍝嶅簲鏁版嵁")
+            request = db.query(CarRequest).filter(
+                CarRequest.id == request_id,
+                CarRequest.user_id == current_user.user_id
+            ).first()
+            
+            if request:
+                # 鏌ヨ浼氳瘽ID
+                session_id = None
+                if request.status in [RequestStatus.CHARGING, RequestStatus.FINISHED]:
+                    session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+                    if session:
+                        session_id = session.id
+                        logger.debug(f"鎵惧埌浼氳瘽ID: {session_id}")
+                
+                # 鏌ヨ鍏呯數妗╃紪鍙?                pile_code = None
+                if request.pile_id:
+                    pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                    if pile:
+                        pile_code = pile.code
+                        logger.debug(f"鎵惧埌鍏呯數妗╃紪鍙? {pile_code}")
+                
+                # 鏋勫缓鏈€灏忕殑鍝嶅簲鏁版嵁
+                result = {
+                    "id": request.id,
+                    "user_id": request.user_id,
+                    "queue_number": request.queue_number,
+                    "mode": request.mode,
+                    "amount_kwh": request.amount_kwh,
+                    "battery_capacity": request.battery_capacity,
+                    "status": request.status,
+                    "pile_id": request.pile_id,
+                    "pile_code": pile_code,
+                    "queue_position": request.queue_position,
+                    "request_time": request.request_time,
+                    "start_time": request.start_time,
+                    "end_time": request.end_time,
+                    "wait_count": 0,
+                    "estimated_wait_time": 0,
+                    "estimated_finish_time": None,
+                    "session_id": session_id
+                }
+                logger.info("鎴愬姛鐢熸垚澶囩敤鍝嶅簲")
+    return result
+        except Exception as backup_err:
+            logger.error(f"鐢熸垚澶囩敤鍝嶅簲澶辫触: {backup_err}")
+        
+        # 濡傛灉澶囩敤鍝嶅簲涔熷け璐ワ紝鍒欒繑鍥?00閿欒
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="鑾峰彇鍏呯數璇锋眰璇︽儏鏃跺彂鐢熼敊璇紝璇疯仈绯荤鐞嗗憳"
+        )
+
+@router.patch("/{request_id}", response_model=ChargeRequest)
+async def update_charge_request(
+    request_id: int,
+    request_update: ChargeRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """淇敼鍏呯數璇锋眰"""
+    # 鏌ヨ璇锋眰
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).first()
+    
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="鍏呯數璇锋眰涓嶅瓨鍦?
+        )
+    
+    # 妫€鏌ヨ姹傜姸鎬?    if request.status not in [RequestStatus.WAITING, RequestStatus.QUEUING]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"鏃犳硶淇敼鐘舵€佷负 {request.status} 鐨勫厖鐢佃姹?
+        )
+    
+    # 淇敼鍏呯數妯″紡
+    if request_update.mode is not None and request_update.mode != request.mode:
+        # 鍙厑璁稿湪绛夊€欏尯淇敼鍏呯數妯″紡
+        if request.status != RequestStatus.WAITING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="鍙兘鍦ㄧ瓑鍊欏尯淇敼鍏呯數妯″紡"
+            )
+        
+        # 鏇存柊妯″紡鍜屾帓闃熷彿鐮?        old_mode = request.mode
+        request.mode = request_update.mode
+        
+        # 鐢熸垚鏂扮殑鎺掗槦鍙风爜
+        request.queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
+    
+    # 淇敼鍏呯數閲?    if request_update.amount_kwh is not None:
+        # 鍏呯數鍖哄彧鍏佽鍙栨秷锛屼笉鍏佽淇敼
+        if request.status != RequestStatus.WAITING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="鍙兘鍦ㄧ瓑鍊欏尯淇敼鍏呯數閲?
+            )
+        
+        request.amount_kwh = request_update.amount_kwh
+    
+    db.commit()
+    db.refresh(request)
+    
+    return request
+
+@router.delete("/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_charge_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鍙栨秷鍏呯數璇锋眰"""
+    # 鏌ヨ璇锋眰
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).first()
+    
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="鍏呯數璇锋眰涓嶅瓨鍦?
+        )
+    
+    # 妫€鏌ヨ姹傜姸鎬?    if request.status == RequestStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="宸插畬鎴愮殑鍏呯數璇锋眰鏃犳硶鍙栨秷"
+        )
+    
+    if request.status == RequestStatus.CANCELED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="璇ュ厖鐢佃姹傚凡缁忓彇娑?
+        )
+    
+    # 鍙栨秷鍏呯數璇锋眰
+    success, message = ChargingScheduler.cancel_charging(db, request_id)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+
+@router.get("/{request_id}/state", response_model=Dict[str, Any])
+async def get_charge_state(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鑾峰彇鍏呯數瀹炴椂鐘舵€?""
+    # 鏌ヨ璇锋眰
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).first()
+    
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="鍏呯數璇锋眰涓嶅瓨鍦?
+        )
+    
+    # 浣跨敤鍏呯數鏈嶅姟鑾峰彇鍏呯數鐘舵€?    state = ChargingService.get_charging_status(db, request_id)
+    
+    return state
+
+@router.get("/queue/{mode}", response_model=Dict[str, Any])
+async def get_queue_info(
+    mode: ChargeMode,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """鑾峰彇闃熷垪淇℃伅"""
+    try:
+    # 鏌ヨ绛夊€欏尯涓妯″紡鐨勮溅杈嗘暟閲?    waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
+    
+        # 鑾峰彇璇ユā寮忎笅鐨勬墍鏈夊厖鐢垫々
+        piles = ChargingScheduler.get_all_piles_by_mode(db, mode)
+    pile_queues = {}
+    total_charging = 0
+    total_queuing = 0
+    
+    for pile in piles:
+            # 鏌ヨ璇ュ厖鐢垫々鐨勬墍鏈夎溅杈嗭紙鍏呯數涓?鎺掗槦涓級
+            queue_cars = (
+            db.query(CarRequest)
+            .filter(CarRequest.pile_id == pile.id)
+            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+            .order_by(CarRequest.queue_position)
+            .all()
+        )
+        
+            # 涓ユ牸鎸夌収涓氬姟瑙勫垯锛氬彧鏈夐槦鍒椾綅缃负0鐨勮溅杈嗗彲浠ュ厖鐢碉紝鍏朵粬閮芥槸鎺掗槦
+            charging_count = 0
+            queuing_count = 0
+            
+            for car in queue_cars:
+                if car.queue_position == 0 and car.status == RequestStatus.CHARGING:
+                    charging_count = 1  # 姣忎釜鍏呯數妗╂渶澶氬彧鏈?杈嗚溅鍏呯數
+                else:
+                    queuing_count += 1
+                    # 璁板綍鏁版嵁涓嶄竴鑷存儏鍐?                    if car.status == RequestStatus.CHARGING and car.queue_position != 0:
+                        logger.warning(f"鏁版嵁涓嶄竴鑷? 杞﹁締{car.id}鐘舵€佷负CHARGING浣嗛槦鍒椾綅缃负{car.queue_position}")
+        
+        pile_queues[pile.code] = {
+                "total": len(queue_cars),
+                "charging": charging_count,  # 鏈€澶氫负1
+                "queuing": queuing_count
+        }
+        
+            total_charging += charging_count
+            total_queuing += queuing_count
+    
+    return {
+        "mode": mode,
+        "waiting_count": waiting_count,
+        "charging_count": total_charging,
+        "queuing_count": total_queuing,
+        "total_count": waiting_count + total_charging + total_queuing,
+        "pile_queues": pile_queues
+    }
+    except Exception as e:
+        logger.error(f"Error getting queue info: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"鑾峰彇闃熷垪淇℃伅澶辫触: {str(e)}"
+        )
+
+@router.post("/{request_id}/simulate", response_model=Dict[str, Any])
+async def simulate_charging(
+    request_id: int,
+    progress: float = Query(..., ge=0, le=100, description="鍏呯數杩涘害鐧惧垎姣?0-100)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    妯℃嫙鍏呯數杩涘害锛堜粎鐢ㄤ簬娴嬭瘯锛?    """
+    # 妫€鏌ョ敤鎴锋潈闄愶紙鍙厑璁哥鐞嗗憳鎴栬姹傜殑鎵€鏈夎€咃級
+    request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
+    
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="鍏呯數璇锋眰涓嶅瓨鍦?
+        )
+    
+    if request.user_id != current_user.user_id and current_user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="娌℃湁鏉冮檺鎵ц姝ゆ搷浣?
+        )
+    
+    # 褰撹繘搴﹁揪鍒?00%鏃讹紝鎴戜滑涓嶅啀鏄?妯℃嫙"锛岃€屾槸瑕佺湡姝ｅ湴"瀹屾垚"鍏呯數
+    if progress >= 100:
+        logger.info(f"Simulate endpoint received 100% progress for request {request_id}. Finishing charging.")
+        success, message = ChargingScheduler.finish_charging(db, request_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to finish charging: {message}"
+            )
+        return {"message": message}
+
+    # 濡傛灉杩涘害涓嶅埌100%锛屽垯浠嶇劧璧版ā鎷熼€昏緫 (铏界劧鍦ㄥ綋鍓嶅満鏅笅涓嶅お鍙兘)
+    success, message = ChargingService.simulate_charging_progress(db, request_id, progress)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    
+    # 鑾峰彇鏈€鏂扮姸鎬?    state = ChargingService.get_charging_status(db, request_id)
+    return {
+        "message": message,
+        "state": state
+    } 

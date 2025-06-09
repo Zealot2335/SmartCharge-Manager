@@ -6,6 +6,7 @@ import logging
 from backend.app.db.models import ChargePile, CarRequest, FaultLog, QueueLog
 from backend.app.db.schemas import ChargeMode, PileStatus, RequestStatus
 from backend.app.services.scheduler import ChargingScheduler
+from backend.app.services.charging_service import ChargingService
 
 logger = logging.getLogger(__name__)
 
@@ -45,30 +46,98 @@ class FaultHandler:
         )
         
         if charging_request:
-            # 中断充电，生成详单
-            charging_request.end_time = datetime.now()
-            
-            # 记录状态变更日志
-            queue_log = QueueLog(
-                request_id=charging_request.id,
-                from_status=RequestStatus.CHARGING,
-                to_status=RequestStatus.QUEUING,
-                pile_id=pile_id,
-                queue_position=0,
-                remark="充电桩故障，中断充电"
-            )
-            db.add(queue_log)
-            db.commit()
+            try:
+                # 获取充电会话
+                from backend.app.db.models import ChargeSession
+                session = db.query(ChargeSession).filter(ChargeSession.request_id == charging_request.id).first()
+                
+                if not session:
+                    # 如果没有会话，创建一个
+                    from backend.app.services.charging_service import ChargingService
+                    success, message, session = ChargingService.create_charge_session(db, charging_request.id)
+                    if not success:
+                        logger.error(f"创建充电会话失败: {message}")
+                        session = None
+                
+                if session:
+                    # 计算已充电时间(分钟)
+                    charging_minutes = (datetime.now() - charging_request.start_time).total_seconds() / 60
+                    
+                    # 估算已充电量
+                    power_per_minute = pile.power / 60  # 每分钟充电量
+                    charged_kwh = power_per_minute * charging_minutes
+                    charged_kwh = min(charged_kwh, charging_request.amount_kwh)  # 不超过请求充电量
+                    
+                    # 完成充电会话，生成账单
+                    from backend.app.services.charging_service import ChargingService
+                    success, message, bill_detail = ChargingService.finish_charge_session(
+                        db, session.id, charged_kwh, int(charging_minutes)
+                    )
+                    
+                    if not success:
+                        logger.error(f"完成充电会话失败: {message}")
+                
+                # 更新请求状态为等待中，不分配到充电桩
+                charging_request.status = RequestStatus.WAITING
+                charging_request.end_time = datetime.now()
+                charging_request.pile_id = None
+                charging_request.queue_position = None
+                
+                # 记录状态变更日志
+                queue_log = QueueLog(
+                    request_id=charging_request.id,
+                    from_status=RequestStatus.CHARGING,
+                    to_status=RequestStatus.WAITING,
+                    pile_id=pile_id,
+                    queue_position=0,
+                    remark="充电桩故障，中断充电，回到等候区"
+                )
+                db.add(queue_log)
+                db.commit()
+            except Exception as e:
+                logger.error(f"处理充电中的请求失败: {str(e)}", exc_info=True)
+                db.rollback()
+                return False, f"处理充电中的请求失败: {str(e)}"
             
         # 获取故障充电桩的队列中的所有车辆
-        queue_cars = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile_id)
-            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
-            .all()
-        )
+        try:
+            queue_cars = (
+                db.query(CarRequest)
+                .filter(CarRequest.pile_id == pile_id)
+                .filter(CarRequest.status == RequestStatus.QUEUING)
+                .all()
+            )
+            
+            # 将所有排队中的车辆移回等候区
+            for car in queue_cars:
+                # 记录原状态
+                old_status = car.status
+                old_pile_id = car.pile_id
+                old_queue_position = car.queue_position
+                
+                # 更新为等候区状态
+                car.status = RequestStatus.WAITING
+                car.pile_id = None
+                car.queue_position = None
+                
+                # 记录状态变更日志
+                queue_log = QueueLog(
+                    request_id=car.id,
+                    from_status=old_status,
+                    to_status=RequestStatus.WAITING,
+                    pile_id=old_pile_id,
+                    queue_position=old_queue_position,
+                    remark="充电桩故障，移回等候区"
+                )
+                db.add(queue_log)
+            
+            db.commit()
+        except Exception as e:
+            logger.error(f"处理排队中的请求失败: {str(e)}", exc_info=True)
+            db.rollback()
+            return False, f"处理排队中的请求失败: {str(e)}"
         
-        return True, f"充电桩 {pile.code} 故障已报告，影响 {len(queue_cars)} 辆车"
+        return True, f"充电桩 {pile.code} 故障已报告，影响 {len(queue_cars) + (1 if charging_request else 0)} 辆车"
     
     @staticmethod
     def recover_pile_fault(db: Session, pile_id: int) -> Tuple[bool, str]:

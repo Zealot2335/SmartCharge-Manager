@@ -7,11 +7,16 @@ import uvicorn
 import os
 import logging
 from pathlib import Path
+from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy.orm import Session
 
 from backend.app.api import auth, charging, billing, admin
 from backend.app.services.websocket import setup_websocket
 from backend.app.db.database import Base, engine
-from backend.app.core.config import get_system_config
+from backend.app.core.config import get_system_config, get_db_url
+from backend.app.background_tasks import periodic_charge_check
+from backend.app.db.database import SessionLocal
+from backend.app.services.scheduler import ChargingScheduler
 
 # 配置日志
 logging.basicConfig(
@@ -19,7 +24,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("app.log")
+        logging.FileHandler("app.log", encoding="utf-8")
     ]
 )
 
@@ -36,9 +41,16 @@ app = FastAPI(
 )
 
 # 配置CORS
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，生产环境应该限制
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,42 +65,13 @@ app.include_router(charging.router, prefix="/api/charging", tags=["充电"])
 app.include_router(billing.router, prefix="/api/billing", tags=["账单"])
 app.include_router(admin.router, prefix="/api/admin", tags=["管理"])
 
-# 静态文件服务
+# 静态文件服务 (修复后)
+# 将整个 frontend 目录挂载到根路径，以便能访问到 login.html, index.html 等
 frontend_path = Path(__file__).parent.parent.parent / "frontend"
 if frontend_path.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
-
-# 根路径重定向到前端页面
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    html_path = frontend_path / "index.html"
-    if html_path.exists():
-        with open(html_path, "r", encoding="utf-8") as f:
-            return f.read()
-    else:
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>智能充电桩调度计费系统</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-                .container { max-width: 800px; margin: 0 auto; }
-                h1 { color: #333; }
-                .api-link { margin-top: 20px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>智能充电桩调度计费系统</h1>
-                <p>系统已成功启动！</p>
-                <div class="api-link">
-                    <p>API文档: <a href="/docs">/docs</a></p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+else:
+    logger.warning(f"Frontend path does not exist: {frontend_path}")
 
 # 健康检查端点
 @app.get("/health")
@@ -98,11 +81,35 @@ async def health_check():
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
-    logger.info("应用启动")
+    # 初始化数据库会话
+    db = SessionLocal()
+    try:
+        # 修复充电桩队列数据
+        ChargingScheduler.fix_pile_charging_status(db)
+        
+        # 启动后台调度器
+        scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+        scheduler.add_job(
+            lambda: periodic_charge_check(SessionLocal()),  # 每次创建新的数据库会话
+            'interval',
+            seconds=10,
+            id='periodic_charge_check'
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        
+        db_url = get_db_url()
+        logger.info(f"应用启动，连接到数据库: {db_url}")
+        logger.info("后台定时任务已启动，每10秒检查一次充电完成情况。")
+    finally:
+        db.close()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("应用关闭")
+    if app.state.scheduler.running:
+        app.state.scheduler.shutdown()
+        logger.info("后台定时任务已关闭。")
 
 # 直接运行时的入口点
 if __name__ == "__main__":
@@ -112,4 +119,4 @@ if __name__ == "__main__":
     port = int(settings.get("port", 8000))
     
     # 启动服务器
-    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True)
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=False)

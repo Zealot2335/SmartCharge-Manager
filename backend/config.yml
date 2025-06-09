@@ -10,8 +10,8 @@ system:
 database:
   host: localhost
   port: 3306
-  user: root
-  password: 20031216cyh
+  user: se_test
+  password: iluvse
   database: smart_charge
   charset: utf8mb4
 
@@ -31,6 +31,10 @@ station:
   SlowPower: 7
   # 服务费单价 元/kWh
   ServiceRate: 0.8
+  # 调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)
+  ScheduleStrategy: default
+  # 批量调度时的车辆数量，仅在bulk_mode模式下有效
+  BulkScheduleSize: 10
 
 # 充电时段费率
 rate:

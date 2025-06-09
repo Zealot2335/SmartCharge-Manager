@@ -7,11 +7,13 @@ from backend.app.db.database import get_db
 from backend.app.db.models import User, ChargePile, CarRequest, RateRule, ServiceRate
 from backend.app.db.schemas import (
     ChargePile as ChargePileSchema, PileStatus,
-    RateRule as RateRuleSchema, RateType, ServiceRate as ServiceRateSchema
+    RateRule as RateRuleSchema, RateType, ServiceRate as ServiceRateSchema,
+    RequestStatus
 )
 from backend.app.core.auth import get_admin_user
 from backend.app.services.report import ReportService
 from backend.app.services.fault_handler import FaultHandler
+from backend.app.services.scheduler import ChargingScheduler
 
 router = APIRouter()
 
@@ -21,7 +23,7 @@ async def get_all_piles(
     current_user: User = Depends(get_admin_user)
 ):
     """获取所有充电桩状态"""
-    piles = db.query(ChargePile).all()
+    piles = db.query(ChargePile).order_by(ChargePile.id).all()
     
     result = []
     for pile in piles:
@@ -213,6 +215,7 @@ async def power_on_pile(
 @router.post("/pile/{code}/shutdown", response_model=Dict[str, Any])
 async def shutdown_pile(
     code: str,
+    strategy: str = Query("priority", description="故障恢复策略，priority或time_order"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
@@ -239,17 +242,96 @@ async def shutdown_pile(
         .first()
     )
     
-    if charging_car:
+    # 如果有正在充电的车辆或排队中的车辆，先处理这些车辆
+    affected_cars = 0
+    rescheduled_cars = []
+    
+    try:
+        # 先报告故障，这会停止计费并生成详单，将所有车辆移回等候区
+        if charging_car or db.query(CarRequest).filter(CarRequest.pile_id == pile.id).filter(CarRequest.status == "QUEUING").count() > 0:
+            success, message = FaultHandler.report_pile_fault(db, pile.id, f"管理员禁用充电桩 {code}")
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=message
+                )
+            
+            # 获取所有被移回等候区的车辆
+            affected_requests = (
+                db.query(CarRequest)
+                .filter(CarRequest.status == RequestStatus.WAITING)
+                .filter(CarRequest.end_time != None)  # 曾经充过电的
+                .all()
+            )
+            affected_cars = len(affected_requests)
+            
+            # 重新调度这些车辆
+            for request in affected_requests:
+                # 根据策略选择调度方法
+                if strategy == "priority":
+                    # 找到最优的同类型充电桩
+                    best_pile = ChargingScheduler.find_best_pile(db, request.mode, request.amount_kwh)
+                    if best_pile:
+                        # 分配到充电桩
+                        success = ChargingScheduler.assign_to_pile(db, request.id, best_pile.id)
+                        if success:
+                            rescheduled_cars.append(request.id)
+                elif strategy == "time_order":
+                    # 时间顺序调度，按照排队号码排序
+                    # 这里简化处理，直接调用调度器的方法
+                    success = ChargingScheduler.schedule_request(db, request.id)
+                    if success:
+                        rescheduled_cars.append(request.id)
+        
+        # 更新充电桩状态为关闭
+        pile.status = PileStatus.OFFLINE
+        db.commit()
+        
+        if affected_cars > 0:
+            return {
+                "code": code, 
+                "status": PileStatus.OFFLINE, 
+                "message": f"充电桩 {code} 已关闭，影响 {affected_cars} 辆车，重新调度 {len(rescheduled_cars)} 辆车",
+                "strategy": strategy,
+                "affected_cars": affected_cars,
+                "rescheduled_cars": len(rescheduled_cars)
+            }
+        else:
+            return {"code": code, "status": PileStatus.OFFLINE, "message": f"充电桩 {code} 已关闭"}
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"充电桩 {code} 有车辆正在充电，无法关闭"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"关闭充电桩失败: {str(e)}"
         )
+
+@router.get("/requests", response_model=List[Dict[str, Any]])
+async def get_recent_requests(
+    limit: int = Query(10, description="返回的请求数量"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """获取最近的充电请求"""
+    requests = (
+        db.query(CarRequest)
+        .order_by(CarRequest.request_time.desc())
+        .limit(limit)
+        .all()
+    )
     
-    # 更新充电桩状态
-    pile.status = PileStatus.OFFLINE
-    db.commit()
-    
-    return {"code": code, "status": pile.status, "message": f"充电桩 {code} 已关闭"}
+    result = []
+    for req in requests:
+        result.append({
+            "id": req.id,
+            "queue_number": req.queue_number,
+            "user_id": req.user_id,
+            "mode": req.mode,
+            "amount_kwh": req.amount_kwh,
+            "status": req.status,
+            "pile_code": req.pile.code if req.pile else None,
+            "request_time": req.request_time,
+        })
+    return result
 
 @router.post("/pile/{code}/fault", response_model=Dict[str, Any])
 async def report_pile_fault(
@@ -420,9 +502,9 @@ async def update_service_rate(
     
     return new_rate
 
-@router.get("/reports/daily", response_model=Dict[str, Any])
+@router.get("/reports/daily/{report_date}", response_model=Dict[str, Any])
 async def get_daily_report(
-    report_date: date = Query(..., description="报表日期"),
+    report_date: date,
     export_csv: bool = Query(False, description="是否导出为CSV格式"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
@@ -495,4 +577,90 @@ async def get_monthly_report(
 ):
     """获取月报表"""
     report = ReportService.get_monthly_report(db, year, month)
-    return report 
+    return report
+
+@router.get("/schedule-strategy", response_model=Dict[str, Any])
+async def get_schedule_strategy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """获取当前调度策略"""
+    from backend.app.core.config import get_station_config
+    config = get_station_config()
+    strategy = config.get("ScheduleStrategy", "default")
+    bulk_size = config.get("BulkScheduleSize", 10)
+    
+    strategy_description = ""
+    if strategy == "default":
+        strategy_description = "默认调度：按照排队号码顺序依次调度"
+    elif strategy == "batch_mode":
+        strategy_description = "单次调度总充电时长最短：多辆车一次性调度，按充电模式分配对应充电桩，满足总充电时长最短"
+    elif strategy == "bulk_mode":
+        strategy_description = f"批量调度总充电时长最短：等待车辆数量达到{bulk_size}辆时才进行一次批量调度，忽略充电模式，满足总充电时长最短"
+    
+    return {
+        "strategy": strategy,
+        "description": strategy_description,
+        "bulk_size": bulk_size
+    }
+
+@router.patch("/schedule-strategy", response_model=Dict[str, Any])
+async def update_schedule_strategy(
+    strategy: str = Query(..., description="调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)"),
+    bulk_size: int = Query(10, ge=1, description="批量调度时的车辆数量，仅在bulk_mode模式下有效"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """更新调度策略"""
+    # 验证策略有效性
+    if strategy not in ["default", "batch_mode", "bulk_mode"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的调度策略: {strategy}"
+        )
+    
+    # 更新配置文件
+    import yaml
+    import os
+    from backend.app.core.config import CONFIG_PATH
+    
+    try:
+        # 读取当前配置
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # 更新调度策略
+        if "station" not in config:
+            config["station"] = {}
+        
+        config["station"]["ScheduleStrategy"] = strategy
+        config["station"]["BulkScheduleSize"] = bulk_size
+        
+        # 写回配置文件
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+        
+        # 重新加载配置
+        from backend.app.core.config import get_config
+        get_config()  # 强制重新加载配置
+        
+        # 返回更新后的策略
+        strategy_description = ""
+        if strategy == "default":
+            strategy_description = "默认调度：按照排队号码顺序依次调度"
+        elif strategy == "batch_mode":
+            strategy_description = "单次调度总充电时长最短：多辆车一次性调度，按充电模式分配对应充电桩，满足总充电时长最短"
+        elif strategy == "bulk_mode":
+            strategy_description = f"批量调度总充电时长最短：等待车辆数量达到{bulk_size}辆时才进行一次批量调度，忽略充电模式，满足总充电时长最短"
+        
+        return {
+            "strategy": strategy,
+            "description": strategy_description,
+            "bulk_size": bulk_size,
+            "message": "调度策略更新成功"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新调度策略失败: {str(e)}"
+        ) 

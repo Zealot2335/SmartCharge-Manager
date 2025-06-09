@@ -2,19 +2,60 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+import logging
 
 from backend.app.db.database import get_db
-from backend.app.db.models import User, CarRequest, ChargePile
+from backend.app.db.models import User, CarRequest, ChargePile, ChargeSession
 from backend.app.db.schemas import (
     ChargeRequestCreate, ChargeRequestUpdate, ChargeRequest, 
-    ChargeRequestDetail, ChargeMode, RequestStatus
+    ChargeRequestDetail, ChargeMode, RequestStatus, ChargeModeUpdateRequest,
+    ChargeAmountUpdateRequest
 )
 from backend.app.core.auth import get_current_user
 from backend.app.services.scheduler import ChargingScheduler
 from backend.app.services.billing import BillingService
 from backend.app.services.charging_service import ChargingService
+from backend.app.core.config import get_station_config
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+@router.get("/waiting_area", response_model=Dict[str, Any])
+async def get_waiting_area_status(db: Session = Depends(get_db)):
+    """获取等候区状态"""
+    logger.info("--- Enter get_waiting_area_status ---")
+    try:
+        logger.info("Step 1: Getting station config.")
+        config = get_station_config()
+        capacity = config.get("WaitingAreaSize", 6)
+        logger.info(f"Step 1 successful. Capacity is {capacity}.")
+
+        logger.info("Step 2: Counting fast waiting cars.")
+        fast_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.FAST)
+        logger.info(f"Step 2 successful. Fast waiting cars: {fast_waiting}.")
+
+        logger.info("Step 3: Counting slow waiting cars.")
+        slow_waiting = ChargingScheduler.count_waiting_cars(db, ChargeMode.SLOW)
+        logger.info(f"Step 3 successful. Slow waiting cars: {slow_waiting}.")
+        
+        total_waiting = fast_waiting + slow_waiting
+        
+        response_data = {
+            "waiting_count": total_waiting,
+            "capacity": capacity,
+            "fast_queue": fast_waiting,
+            "slow_queue": slow_waiting
+        }
+        logger.info(f"--- Exiting get_waiting_area_status with data: {response_data} ---")
+        return response_data
+    except Exception as e:
+        logger.error(f"!!!!!! EXCEPTION in get_waiting_area_status: {e}", exc_info=True)
+        # 重新抛出HTTP异常，以便FastAPI可以处理它
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 @router.post("/request", response_model=ChargeRequest)
 async def create_charge_request(
@@ -23,35 +64,43 @@ async def create_charge_request(
     current_user: User = Depends(get_current_user)
 ):
     """提交充电请求"""
-    # 检查等候区是否已满
-    if not ChargingScheduler.check_waiting_area_capacity(db):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="等候区已满，请稍后再试"
+    try:
+        # 检查等候区是否已满
+        if not ChargingScheduler.check_waiting_area_capacity(db):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="等候区已满，请稍后再试"
+            )
+        
+        # 生成排队号码
+        queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
+        
+        # 创建充电请求
+        db_request = CarRequest(
+            user_id=current_user.user_id,
+            queue_number=queue_number,
+            mode=request.mode,
+            amount_kwh=request.amount_kwh,
+            battery_capacity=request.battery_capacity,
+            status=RequestStatus.WAITING,
+            request_time=datetime.now()
         )
-    
-    # 生成排队号码
-    queue_number = ChargingScheduler.generate_queue_number(db, request.mode)
-    
-    # 创建充电请求
-    db_request = CarRequest(
-        user_id=current_user.user_id,
-        queue_number=queue_number,
-        mode=request.mode,
-        amount_kwh=request.amount_kwh,
-        battery_capacity=request.battery_capacity,
-        status=RequestStatus.WAITING,
-        request_time=datetime.now()
-    )
-    
-    db.add(db_request)
-    db.commit()
-    db.refresh(db_request)
-    
-    # 尝试立即调度
-    ChargingScheduler.check_and_call_waiting_cars(db)
-    
-    return db_request
+        
+        db.add(db_request)
+        db.commit()
+        db.refresh(db_request)
+        
+        # 提交事务后再尝试调度
+        logger.info(f"New charge request {db_request.id} created, attempting to schedule.")
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return db_request
+    except Exception as e:
+        logger.error(f"Error creating charge request: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"提交充电请求失败: {str(e)}"
+        )
 
 @router.get("/requests", response_model=List[ChargeRequest])
 async def get_user_requests(
@@ -75,86 +124,236 @@ async def get_charge_request(
     current_user: User = Depends(get_current_user)
 ):
     """获取充电请求详情"""
-    # 查询请求
-    request = db.query(CarRequest).filter(
-        CarRequest.id == request_id,
-        CarRequest.user_id == current_user.user_id
-    ).first()
-    
-    if not request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="充电请求不存在"
-        )
-    
-    # 创建响应数据
-    result = ChargeRequestDetail.from_orm(request)
-    
-    # 计算等待人数
-    if request.status == RequestStatus.WAITING:
-        # 计算同模式下在等候区等待的车辆数量（排在前面的）
-        wait_count = (
-            db.query(CarRequest)
-            .filter(CarRequest.mode == request.mode)
-            .filter(CarRequest.status == RequestStatus.WAITING)
-            .filter(CarRequest.queue_number < request.queue_number)
-            .count()
-        )
-        result.wait_count = wait_count
+    logger.info(f"开始获取充电请求详情: 请求ID={request_id}, 用户ID={current_user.user_id}")
+    try:
+        # 查询请求
+        logger.debug(f"查询充电请求: ID={request_id}")
+        request = db.query(CarRequest).filter(
+            CarRequest.id == request_id,
+            CarRequest.user_id == current_user.user_id
+        ).first()
         
-        # 估算等待时间
-        # 简单估计：假设所有充电桩都有车，新来的车需要等待最后一个位置
-        pile_count = len(ChargingScheduler.get_available_piles(db, request.mode))
-        if pile_count > 0:
-            # 假设每辆车平均充电时间为 amount_kwh / power
-            power = 30.0 if request.mode == ChargeMode.FAST else 7.0
-            avg_charging_time = request.amount_kwh / power * 60  # 转换为分钟
-            
-            # 估计等待时间 = 前面等待的车辆数 / 充电桩数 * 平均充电时间
-            result.estimated_wait_time = (wait_count / pile_count) * avg_charging_time
-            
-            # 估计完成时间
-            if result.estimated_wait_time:
-                result.estimated_finish_time = datetime.now() + timedelta(minutes=result.estimated_wait_time)
-    
-    elif request.status in [RequestStatus.QUEUING, RequestStatus.CHARGING]:
+        if not request:
+            logger.warning(f"充电请求不存在: ID={request_id}, 用户ID={current_user.user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="充电请求不存在"
+            )
+        
+        logger.debug(f"找到充电请求: ID={request_id}, 状态={request.status}")
+        
+        # 创建响应数据
+        logger.debug(f"创建响应数据模型")
+        result = ChargeRequestDetail.from_orm(request)
+        logger.debug(f"响应数据模型创建成功: {result}")
+        
+        # 如果有充电桩ID，查询充电桩信息
         if request.pile_id:
-            # 计算在该充电桩排队的预计等待时间
-            waiting_time = ChargingScheduler.get_pile_queue_waiting_time(db, request.pile_id)
-            
-            # 如果是正在充电的车辆，等待时间为0
-            if request.status == RequestStatus.CHARGING:
-                result.wait_count = 0
-                result.estimated_wait_time = 0
-                
-                # 计算自身充电时间
-                power = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first().power
-                charging_time = request.amount_kwh / power * 60  # 转换为分钟
-                
-                # 估计完成时间
-                start_time = request.start_time or datetime.now()
-                result.estimated_finish_time = start_time + timedelta(minutes=charging_time)
-            else:
-                # 排队中的车辆
-                # 计算前面排队的车辆数
-                result.wait_count = (
+            logger.debug(f"请求关联充电桩: ID={request.pile_id}")
+            try:
+                pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                if pile:
+                    logger.debug(f"找到充电桩: 编号={pile.code}")
+                    result.pile_code = pile.code
+                else:
+                    logger.warning(f"未找到充电桩: ID={request.pile_id}")
+            except Exception as e:
+                logger.error(f"获取充电桩信息失败: {e}", exc_info=True)
+        else:
+            logger.debug(f"请求未关联充电桩")
+        
+        # 如果状态是充电中或已完成，查询会话ID
+        if request.status in [RequestStatus.CHARGING, RequestStatus.FINISHED]:
+            logger.debug(f"查询充电会话: 请求ID={request.id}")
+            try:
+                session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+                if session:
+                    logger.debug(f"找到充电会话: ID={session.id}")
+                    result.session_id = session.id
+                else:
+                    logger.warning(f"未找到充电会话: 请求ID={request.id}")
+            except Exception as e:
+                logger.error(f"获取会话ID失败: {e}", exc_info=True)
+        
+        # 计算等待人数
+        if request.status == RequestStatus.WAITING:
+            logger.debug(f"处理等候区等待状态")
+            try:
+                # 计算同模式下在等候区等待的车辆数量（排在前面的）
+                wait_count = (
                     db.query(CarRequest)
-                    .filter(CarRequest.pile_id == request.pile_id)
-                    .filter(CarRequest.queue_position < request.queue_position)
+                    .filter(CarRequest.mode == request.mode)
+                    .filter(CarRequest.status == RequestStatus.WAITING)
+                    .filter(CarRequest.queue_number < request.queue_number)
                     .count()
                 )
+                logger.debug(f"等候区前面等待车辆数: {wait_count}")
+                result.wait_count = wait_count
                 
-                # 计算自身充电时间
-                power = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first().power
-                charging_time = request.amount_kwh / power * 60  # 转换为分钟
+                # 估算等待时间
+                # 简单估计：假设所有充电桩都有车，新来的车需要等待最后一个位置
+                logger.debug(f"获取可用充电桩: 模式={request.mode}")
+                piles = ChargingScheduler.get_available_piles(db, request.mode)
+                pile_count = len(piles) if piles else 0
+                logger.debug(f"可用充电桩数量: {pile_count}")
                 
-                # 估计等待时间 = 队列等待时间 - 自身充电时间
-                result.estimated_wait_time = waiting_time - charging_time
+                if pile_count > 0:
+                    # 假设每辆车平均充电时间为 amount_kwh / power
+                    power = 30.0 if request.mode == ChargeMode.FAST else 7.0
+                    avg_charging_time = request.amount_kwh / power * 60  # 转换为分钟
+                    logger.debug(f"平均充电时间: {avg_charging_time}分钟")
+                    
+                    # 估计等待时间 = 前面等待的车辆数 / 充电桩数 * 平均充电时间
+                    result.estimated_wait_time = (wait_count / pile_count) * avg_charging_time
+                    logger.debug(f"估计等待时间: {result.estimated_wait_time}分钟")
+                    
+                    # 估计完成时间
+                    if result.estimated_wait_time:
+                        result.estimated_finish_time = datetime.now() + timedelta(minutes=result.estimated_wait_time)
+                        logger.debug(f"估计完成时间: {result.estimated_finish_time}")
+            except Exception as e:
+                logger.error(f"计算等候区等待时间失败: {e}", exc_info=True)
+                # 设置默认值，不影响整体返回
+                result.wait_count = 0
+                result.estimated_wait_time = None
+                result.estimated_finish_time = None
+        
+        elif request.status in [RequestStatus.QUEUING, RequestStatus.CHARGING]:
+            if request.pile_id:
+                logger.debug(f"处理充电桩队列状态: 状态={request.status}")
+                try:
+                    pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                    if pile:
+                        power = pile.power
+                        logger.debug(f"充电桩功率: {power}")
+                    else:
+                        power = 30.0
+                        logger.warning(f"未找到充电桩，使用默认功率: {power}")
+                    
+                    # 如果是正在充电的车辆
+                    if request.status == RequestStatus.CHARGING and request.start_time:
+                        logger.debug(f"处理充电中状态")
+                        result.wait_count = 0
+                        result.estimated_wait_time = 0
+                        
+                        # 计算实时充电数据
+                        charging_duration = datetime.now() - request.start_time
+                        result.charging_minutes = charging_duration.total_seconds() / 60
+                        logger.debug(f"充电时长: {result.charging_minutes}分钟")
+                        
+                        power_per_minute = power / 60
+                        result.charged_kwh = min(power_per_minute * result.charging_minutes, request.amount_kwh)
+                        logger.debug(f"已充电量: {result.charged_kwh}kWh")
+                        
+                        remaining_kwh = request.amount_kwh - result.charged_kwh
+                        result.remaining_minutes = (remaining_kwh / power) * 60 if power > 0 else 0
+                        logger.debug(f"剩余时间: {result.remaining_minutes}分钟")
+                        
+                        result.progress = (result.charged_kwh / request.amount_kwh) * 100 if request.amount_kwh > 0 else 100
+                        logger.debug(f"充电进度: {result.progress}%")
+                        
+                        # 估计完成时间
+                        result.estimated_finish_time = datetime.now() + timedelta(minutes=result.remaining_minutes)
+                        logger.debug(f"估计完成时间: {result.estimated_finish_time}")
+                    
+                    else: # 排队中的车辆
+                        logger.debug(f"处理排队中状态")
+                        try:
+                            # 计算前面排队的车辆数
+                            result.wait_count = (
+                                db.query(CarRequest)
+                                .filter(CarRequest.pile_id == request.pile_id)
+                                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                                .filter(CarRequest.queue_position < request.queue_position)
+                                .count()
+                            )
+                            logger.debug(f"前面排队的车辆数: {result.wait_count}")
+                            
+                            # 估算在它前面的所有车辆的总充电时间
+                            logger.debug(f"计算前面车辆总等待时间: 充电桩={request.pile_id}, 队列位置={request.queue_position}")
+                            wait_time_minutes = ChargingScheduler.get_pile_queue_waiting_time(db, request.pile_id, request.queue_position)
+                            logger.debug(f"前面车辆总等待时间: {wait_time_minutes}分钟")
+                            result.estimated_wait_time = wait_time_minutes
+                            
+                            # 加上自己的充电时间
+                            own_charging_time = (request.amount_kwh / power) * 60 if power > 0 else 0
+                            logger.debug(f"自己充电时间: {own_charging_time}分钟")
+                            result.estimated_finish_time = datetime.now() + timedelta(minutes=(wait_time_minutes + own_charging_time))
+                            logger.debug(f"估计完成时间: {result.estimated_finish_time}")
+                        except Exception as e:
+                            logger.error(f"计算充电桩等待时间失败: {e}", exc_info=True)
+                            # 设置默认值，不影响整体返回
+                            result.wait_count = 0
+                            result.estimated_wait_time = None
+                            result.estimated_finish_time = None
+                except Exception as e:
+                    logger.error(f"处理充电桩队列信息失败: {e}", exc_info=True)
+        
+        logger.info(f"成功获取充电请求详情: 请求ID={request_id}")
+        
+        # 将结果转换为字典，检查是否有任何缺失的必需字段
+        result_dict = result.dict()
+        logger.debug(f"最终响应数据: {result_dict}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"获取充电请求详情失败: 请求ID={request_id}, 用户ID={current_user.user_id}, 错误: {e}", exc_info=True)
+        
+        # 尝试返回基本数据，避免500错误
+        try:
+            logger.warning("尝试提供备用响应数据")
+            request = db.query(CarRequest).filter(
+                CarRequest.id == request_id,
+                CarRequest.user_id == current_user.user_id
+            ).first()
+            
+            if request:
+                # 查询会话ID
+                session_id = None
+                if request.status in [RequestStatus.CHARGING, RequestStatus.FINISHED]:
+                    session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+                    if session:
+                        session_id = session.id
+                        logger.debug(f"找到会话ID: {session_id}")
                 
-                # 估计完成时间
-                result.estimated_finish_time = datetime.now() + timedelta(minutes=waiting_time)
-    
-    return result
+                # 查询充电桩编号
+                pile_code = None
+                if request.pile_id:
+                    pile = db.query(ChargePile).filter(ChargePile.id == request.pile_id).first()
+                    if pile:
+                        pile_code = pile.code
+                        logger.debug(f"找到充电桩编号: {pile_code}")
+                
+                # 构建最小的响应数据
+                result = {
+                    "id": request.id,
+                    "user_id": request.user_id,
+                    "queue_number": request.queue_number,
+                    "mode": request.mode,
+                    "amount_kwh": request.amount_kwh,
+                    "battery_capacity": request.battery_capacity,
+                    "status": request.status,
+                    "pile_id": request.pile_id,
+                    "pile_code": pile_code,
+                    "queue_position": request.queue_position,
+                    "request_time": request.request_time,
+                    "start_time": request.start_time,
+                    "end_time": request.end_time,
+                    "wait_count": 0,
+                    "estimated_wait_time": 0,
+                    "estimated_finish_time": None,
+                    "session_id": session_id
+                }
+                logger.info("成功生成备用响应")
+                return result
+        except Exception as backup_err:
+            logger.error(f"生成备用响应失败: {backup_err}")
+        
+        # 如果备用响应也失败，则返回500错误
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取充电请求详情时发生错误，请联系管理员"
+        )
 
 @router.patch("/{request_id}", response_model=ChargeRequest)
 async def update_charge_request(
@@ -214,6 +413,136 @@ async def update_charge_request(
     db.refresh(request)
     
     return request
+
+@router.put("/requests/{request_id}/mode", response_model=ChargeRequest)
+async def change_charge_mode(
+    request_id: int,
+    mode_update: ChargeModeUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    修改充电请求的模式 (仅限在等候区)
+    """
+    logger.info(f"--- 正在修改充电请求 {request_id} 的模式为 {mode_update.mode} ---")
+
+    # 使用 with_for_update 来锁定行，防止并发问题
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).with_for_update().first()
+
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="充电请求不存在"
+        )
+
+    # 检查状态是否为 'WAITING'
+    if request.status != RequestStatus.WAITING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"只能修改处于'等候区(WAITING)'状态的请求，当前状态为 {request.status}"
+        )
+        
+    if request.mode == mode_update.mode.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"请求已经是 {mode_update.mode.value} 模式，无需修改"
+        )
+
+    # 更新模式并重新生成排队号
+    try:
+        old_mode = request.mode
+        new_mode = mode_update.mode
+        
+        logger.info(f"请求 {request.id} 从模式 {old_mode} 切换到 {new_mode.value}")
+        
+        # 更新模式
+        request.mode = new_mode.value
+        
+        # 重新生成排队号
+        new_queue_number = ChargingScheduler.generate_queue_number(db, new_mode)
+        request.queue_number = new_queue_number
+        
+        request.request_time = datetime.now()
+        
+        db.commit()
+        db.refresh(request)
+        
+        logger.info(f"请求 {request_id} 模式修改成功，新排队号: {request.queue_number}")
+        
+        ChargingScheduler.check_and_call_waiting_cars(db)
+        
+        return request
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"修改充电模式失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修改充电模式失败: {str(e)}"
+        )
+
+@router.patch("/requests/{request_id}/amount", response_model=ChargeRequest)
+async def change_charge_amount(
+    request_id: int,
+    amount_update: ChargeAmountUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    修改请求的充电量 (仅限在等候区)
+    """
+    logger.info(f"--- 正在修改充电请求 {request_id} 的充电量为 {amount_update.amount_kwh} kWh ---")
+
+    request = db.query(CarRequest).filter(
+        CarRequest.id == request_id,
+        CarRequest.user_id == current_user.user_id
+    ).with_for_update().first()
+
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="充电请求不存在"
+        )
+
+    if request.status != RequestStatus.WAITING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"只能修改处于'等候区(WAITING)'状态的请求，当前状态为 {request.status}"
+        )
+
+    if amount_update.amount_kwh > request.battery_capacity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"充电量 ({amount_update.amount_kwh} kWh) 不能超过电池容量 ({request.battery_capacity} kWh)"
+        )
+    
+    if amount_update.amount_kwh == request.amount_kwh:
+        return request
+
+    try:
+        old_amount = request.amount_kwh
+        new_amount = amount_update.amount_kwh
+        
+        request.amount_kwh = new_amount
+        request.updated_at = datetime.now()
+        
+        db.commit()
+        db.refresh(request)
+        
+        logger.info(f"请求 {request_id} 充电量从 {old_amount} kWh 修改成功为 {new_amount} kWh")
+        
+        return request
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"修改充电量失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修改充电量失败: {str(e)}"
+        )
 
 @router.delete("/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_charge_request(
@@ -287,45 +616,62 @@ async def get_queue_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取队列信息"""
-    # 查询等候区中该模式的车辆数量
-    waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
-    
-    # 查询充电区中该模式的车辆数量
-    piles = ChargingScheduler.get_available_piles(db, mode)
-    pile_queues = {}
-    total_charging = 0
-    total_queuing = 0
-    
-    for pile in piles:
-        # 查询该充电桩的队列
-        queue = (
-            db.query(CarRequest)
-            .filter(CarRequest.pile_id == pile.id)
-            .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
-            .order_by(CarRequest.queue_position)
-            .all()
-        )
+    try:
+        # 查询等候区中该模式的车辆数量
+        waiting_count = ChargingScheduler.count_waiting_cars(db, mode)
         
-        charging = [q for q in queue if q.status == RequestStatus.CHARGING]
-        queuing = [q for q in queue if q.status == RequestStatus.QUEUING]
+        # 获取该模式下的所有充电桩
+        piles = ChargingScheduler.get_all_piles_by_mode(db, mode)
+        pile_queues = {}
+        total_charging = 0
+        total_queuing = 0
         
-        pile_queues[pile.code] = {
-            "total": len(queue),
-            "charging": len(charging),
-            "queuing": len(queuing)
+        for pile in piles:
+            # 查询该充电桩的所有车辆（充电中+排队中）
+            queue_cars = (
+                db.query(CarRequest)
+                .filter(CarRequest.pile_id == pile.id)
+                .filter(CarRequest.status.in_([RequestStatus.CHARGING, RequestStatus.QUEUING]))
+                .order_by(CarRequest.queue_position)
+                .all()
+            )
+            
+            # 严格按照业务规则：只有队列位置为0的车辆可以充电，其他都是排队
+            charging_count = 0
+            queuing_count = 0
+            
+            for car in queue_cars:
+                if car.queue_position == 0 and car.status == RequestStatus.CHARGING:
+                    charging_count = 1  # 每个充电桩最多只有1辆车充电
+                else:
+                    queuing_count += 1
+                    # 记录数据不一致情况
+                    if car.status == RequestStatus.CHARGING and car.queue_position != 0:
+                        logger.warning(f"数据不一致: 车辆{car.id}状态为CHARGING但队列位置为{car.queue_position}")
+            
+            pile_queues[pile.code] = {
+                "total": len(queue_cars),
+                "charging": charging_count,  # 最多为1
+                "queuing": queuing_count
+            }
+            
+            total_charging += charging_count
+            total_queuing += queuing_count
+        
+        return {
+            "mode": mode,
+            "waiting_count": waiting_count,
+            "charging_count": total_charging,
+            "queuing_count": total_queuing,
+            "total_count": waiting_count + total_charging + total_queuing,
+            "pile_queues": pile_queues
         }
-        
-        total_charging += len(charging)
-        total_queuing += len(queuing)
-    
-    return {
-        "mode": mode,
-        "waiting_count": waiting_count,
-        "charging_count": total_charging,
-        "queuing_count": total_queuing,
-        "total_count": waiting_count + total_charging + total_queuing,
-        "pile_queues": pile_queues
-    }
+    except Exception as e:
+        logger.error(f"Error getting queue info: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取队列信息失败: {str(e)}"
+        )
 
 @router.post("/{request_id}/simulate", response_model=Dict[str, Any])
 async def simulate_charging(
@@ -352,7 +698,18 @@ async def simulate_charging(
             detail="没有权限执行此操作"
         )
     
-    # 模拟充电进度
+    # 当进度达到100%时，我们不再是"模拟"，而是要真正地"完成"充电
+    if progress >= 100:
+        logger.info(f"Simulate endpoint received 100% progress for request {request_id}. Finishing charging.")
+        success, message = ChargingScheduler.finish_charging(db, request_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to finish charging: {message}"
+            )
+        return {"message": message}
+
+    # 如果进度不到100%，则仍然走模拟逻辑 (虽然在当前场景下不太可能)
     success, message = ChargingService.simulate_charging_progress(db, request_id, progress)
     
     if not success:

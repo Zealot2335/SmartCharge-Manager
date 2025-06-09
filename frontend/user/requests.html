@@ -179,8 +179,12 @@
                             <td>
                                 <div class="action-buttons">
                                     <button class="btn btn-sm view-btn" data-id="${request.id}">查看</button>
-                                    ${request.status === 'WAITING' || request.status === 'QUEUING'
-                                        ? `<button class="btn btn-sm btn-danger cancel-btn" data-id="${request.id}">取消</button>`
+                                    ${request.status === 'WAITING'
+                                        ? `<button class="btn btn-sm btn-secondary change-mode-btn" data-id="${request.id}" data-mode="${request.mode}">修改模式</button>` +
+                                          `<button class="btn btn-sm btn-info change-amount-btn" data-id="${request.id}" data-current-amount="${request.amount_kwh}" data-battery-capacity="${request.battery_capacity}">修改电量</button>`
+                                        : ''}
+                                    ${request.status === 'WAITING' || request.status === 'QUEUING' || request.status === 'CHARGING'
+                                        ? `<button class="btn btn-sm btn-danger cancel-btn" data-id="${request.id}" data-status="${request.status}">取消</button>`
                                         : ''}
                                 </div>
                             </td>
@@ -277,44 +281,93 @@
         // 绑定操作按钮事件
         function bindActionButtons() {
             // 查看按钮
-            const viewBtns = document.querySelectorAll('.view-btn');
-            viewBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const requestId = btn.getAttribute('data-id');
-                    window.location.href = `/user/request.html?id=${requestId}`;
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    window.location.href = `request.html?id=${id}`;
                 });
             });
-            
+
             // 取消按钮
-            const cancelBtns = document.querySelectorAll('.cancel-btn');
-            cancelBtns.forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    if (!confirm('确定要取消该充电请求吗？')) {
+            document.querySelectorAll('.cancel-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.dataset.id;
+                    const status = e.target.dataset.status;
+                    let confirmMessage = '您确定要取消这个充电请求吗？';
+                    
+                    if (status === 'CHARGING') {
+                        confirmMessage = '您确定要取消正在充电中的请求吗？这将结束充电并按照已充电量计费。';
+                    }
+                    
+                    if (confirm(confirmMessage)) {
+                        try {
+                            await API.charging.cancelRequest(id);
+                            Utils.showToast('请求已取消');
+                            loadRequests(); // 重新加载
+                        } catch (error) {
+                            Utils.showToast(`取消失败: ${error.message}`, 'error');
+                        }
+                    }
+                });
+            });
+
+            // 修改模式按钮
+            document.querySelectorAll('.change-mode-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.dataset.id;
+                    const currentMode = e.target.dataset.mode;
+                    const newMode = currentMode === 'FAST' ? 'SLOW' : 'FAST';
+                    const currentModeText = Utils.getChargeModeName(currentMode);
+                    const newModeText = Utils.getChargeModeName(newMode);
+
+                    if (confirm(`您确定要将充电模式从【${currentModeText}】切换到【${newModeText}】吗？\n\n注意：这将会让您在新的队列中重新排队。`)) {
+                        try {
+                            await API.charging.changeChargeMode(id, newMode);
+                            Utils.showToast('充电模式修改成功，已重新排队');
+                            loadRequests(); // 重新加载
+                        } catch (error) {
+                            Utils.showToast(`修改模式失败: ${error.message}`, 'error');
+                        }
+                    }
+                });
+            });
+
+            // 修改电量按钮
+            document.querySelectorAll('.change-amount-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.dataset.id;
+                    const currentAmount = parseFloat(e.target.dataset.currentAmount);
+                    const batteryCapacity = parseFloat(e.target.dataset.batteryCapacity);
+
+                    const newAmountStr = prompt(`请输入新的充电量 (kWh)。\n\n当前电量: ${currentAmount} kWh\n电池容量: ${batteryCapacity} kWh`, currentAmount);
+
+                    if (newAmountStr === null) {
+                        return;
+                    }
+
+                    const newAmount = parseFloat(newAmountStr);
+
+                    if (isNaN(newAmount) || newAmount <= 0) {
+                        Utils.showToast('请输入一个有效的正数。', 'error');
+                        return;
+                    }
+
+                    if (newAmount > batteryCapacity) {
+                        Utils.showToast(`充电量不能超过电池容量 (${batteryCapacity} kWh)。`, 'error');
                         return;
                     }
                     
-                    const requestId = btn.getAttribute('data-id');
-                    
+                    if (newAmount === currentAmount) {
+                         Utils.showToast('新的充电量与当前值相同，未作修改。', 'info');
+                         return;
+                    }
+
                     try {
-                        // 禁用按钮
-                        btn.disabled = true;
-                        btn.textContent = '取消中...';
-                        
-                        // 取消请求
-                        await API.charging.cancelRequest(requestId);
-                        
-                        // 成功提示
-                        Utils.showNotification('充电请求已取消', 'success');
-                        
-                        // 重新加载请求
+                        await API.charging.changeChargeAmount(id, newAmount);
+                        Utils.showToast('充电量修改成功');
                         loadRequests();
                     } catch (error) {
-                        console.error('取消充电请求失败:', error);
-                        Utils.showNotification('取消充电请求失败: ' + error.message, 'danger');
-                        
-                        // 启用按钮
-                        btn.disabled = false;
-                        btn.textContent = '取消';
+                        Utils.showToast(`修改电量失败: ${error.message}`, 'error');
                     }
                 });
             });
@@ -363,9 +416,15 @@
                 // 成功提示
                 Utils.showNotification('充电请求已提交，排队号码: ' + result.queue_number, 'success');
                 
+                // 发布一个事件，通知其他页面数据已更新
+                window.dispatchEvent(new CustomEvent('charge-request-updated'));
+                
                 // 关闭模态框
                 const modal = document.getElementById('new-request-modal');
                 modal.style.display = 'none';
+                
+                // 重置表单
+                event.target.reset();
                 
                 // 重新加载请求
                 loadRequests();
@@ -377,6 +436,8 @@
                 const submitBtn = event.target.querySelector('button[type="submit"]');
                 submitBtn.disabled = false;
                 submitBtn.textContent = '提交请求';
+                
+                // 不关闭模态框，让用户有机会修改并重试
             }
         }
         

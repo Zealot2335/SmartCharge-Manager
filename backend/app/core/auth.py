@@ -21,12 +21,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """验证密码（修改为明文验证）"""
+    return plain_password == hashed_password
 
 def get_password_hash(password: str) -> str:
-    """获取密码哈希"""
-    return pwd_context.hash(password)
+    """获取密码哈希（修改为直接返回明文）"""
+    return password
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     """用户认证"""

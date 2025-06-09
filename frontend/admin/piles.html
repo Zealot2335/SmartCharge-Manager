@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>充电桩管理 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .pile-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .pile-card {
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 15px;
+            background-color: #fff;
+        }
+        .pile-card .status {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .pile-card .status.available {
+            color: #28a745;
+        }
+        .pile-card .status.busy {
+            color: #fd7e14;
+        }
+        .pile-card .status.fault {
+            color: #dc3545;
+        }
+        .pile-card .status.offline {
+            color: #6c757d;
+        }
+        .pile-card p {
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+        .pile-card .actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .pile-card .actions button {
+            font-size: 0.85rem;
+            padding: 3px 10px;
+        }
+        .pile-stats {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+        }
+        .stat-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .stat-row span {
+            font-size: 0.9rem;
+        }
+
+        /* 系统参数样式 */
+        .param-card {
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+        .param-title {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #333;
+        }
+        .param-description {
+            margin-bottom: 15px;
+            color: #666;
+        }
+        .param-control {
+            display: flex;
+            align-items: center;
+        }
+        .param-control input {
+            width: 120px;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .param-control .current-value {
+            color: #666;
+            margin-left: 15px;
+        }
+        .sync-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .sync-ok {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-actions {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .tab-control {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 20px;
+        }
+        .tab-control .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-control .tab.active {
+            font-weight: bold;
+            border-bottom: 2px solid #007bff;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* 表格样式 */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            border: 1px solid #dee2e6;
+            text-align: left;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <h1 class="card-title">充电桩管理</h1>
+                
+                <!-- 标签页控制 -->
+                <div class="tab-control">
+                    <div class="tab active" data-tab="pile-status">充电桩状态</div>
+                    <div class="tab" data-tab="system-params">系统参数设置</div>
+                </div>
+                
+                <!-- 充电桩状态标签页 -->
+                <div class="tab-content active" id="pile-status">
+                    <p id="pile-loading">正在加载充电桩数据...</p>
+                    <div id="pile-status-container"></div>
+                </div>
+                
+                <!-- 系统参数标签页 -->
+                <div class="tab-content" id="system-params">
+                    <p>在这里可以调整系统的关键运行参数。请谨慎修改这些参数，因为它们可能会影响系统的正常运行。</p>
+                    
+                    <!-- 同步状态提示 -->
+                    <div id="sync-status" style="display: none;"></div>
+                    
+                    <!-- 参数表单 - 使用静态HTML结构 -->
+                    <form id="params-form">
+                        <table class="table" style="width: 100%; margin-bottom: 20px;">
+                            <thead>
+                                <tr>
+                                    <th>参数名称</th>
+                                    <th>当前值</th>
+                                    <th>新值</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>快充电桩数</strong></td>
+                                    <td id="current-FastChargingPileNum">--</td>
+                                    <td><input type="number" id="FastChargingPileNum" name="FastChargingPileNum" value="0" min="1" step="1" style="width: 80px;"></td>
+                                    <td>系统中快充电桩的总数量</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>慢充电桩数</strong></td>
+                                    <td id="current-TrickleChargingPileNum">--</td>
+                                    <td><input type="number" id="TrickleChargingPileNum" name="TrickleChargingPileNum" value="0" min="1" step="1" style="width: 80px;"></td>
+                                    <td>系统中慢充电桩的总数量</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>等候区车位容量</strong></td>
+                                    <td id="current-WaitingAreaSize">--</td>
+                                    <td><input type="number" id="WaitingAreaSize" name="WaitingAreaSize" value="0" min="1" step="1" style="width: 80px;"></td>
+                                    <td>等候区可以容纳的最大车辆数</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>充电桩排队队列长度</strong></td>
+                                    <td id="current-ChargingQueueLen">--</td>
+                                    <td><input type="number" id="ChargingQueueLen" name="ChargingQueueLen" value="0" min="1" step="1" style="width: 80px;"></td>
+                                    <td>每个充电桩最大排队车辆数</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="reload-btn" class="btn btn-secondary">重新加载配置</button>
+                            <button type="submit" id="save-btn" class="btn btn-primary">保存更改</button>
+                        </div>
+                    </form>
+                    
+                    <div class="alert alert-warning" style="margin-top: 15px; background-color: #fff3cd; padding: 15px; border-radius: 5px; color: #856404;">
+                        <strong>注意：</strong> 修改参数后，请点击"保存更改"按钮，参数将同时更新到数据库和配置文件中。
+                        如果系统行为没有立即反映变化，您可能需要点击"重新加载配置"按钮。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 脚本 -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 加载导航菜单
+            api.loadAdminMenu();
+            
+            // 加载充电桩状态
+            loadPileStatus();
+            
+            // 加载系统参数
+            loadSystemParams();
+            
+            // 标签页切换
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // 更新激活标签
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    // 更新内容显示
+                    const tabId = tab.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+            
+            // 表单提交
+            document.getElementById('params-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                updateSystemParams();
+            });
+            
+            // 重新加载配置按钮
+            document.getElementById('reload-btn').addEventListener('click', () => {
+                reloadConfig();
+            });
+            
+            // 设置定时刷新（只在充电桩状态标签页激活时刷新）
+            setInterval(() => {
+                if (document.getElementById('pile-status').classList.contains('active')) {
+                    loadPileStatus();
+                }
+            }, 5000); // 每5秒刷新一次
+        });
+        
+        // 加载充电桩状态
+        async function loadPileStatus() {
+            const container = document.getElementById('pile-status-container');
+            const loadingElem = document.getElementById('pile-loading');
+            
+            try {
+                loadingElem.style.display = 'block';
+                
+                // 获取充电桩列表
+                const piles = await API.admin.getPiles();
+                
+                loadingElem.style.display = 'none';
+                
+                // 按类型分组
+                const fastPiles = piles.filter(pile => pile.type === 'FAST');
+                const slowPiles = piles.filter(pile => pile.type === 'SLOW');
+                
+                // 计算状态统计
+                const stats = {
+                    total: piles.length,
+                    available: piles.filter(pile => pile.status === 'AVAILABLE').length,
+                    busy: piles.filter(pile => pile.status === 'BUSY').length,
+                    fault: piles.filter(pile => pile.status === 'FAULT').length,
+                    offline: piles.filter(pile => pile.status === 'OFFLINE').length
+                };
+                
+                // 显示充电桩状态
+                let html = `
+                    <div class="pile-stats">
+                        <div class="stat-row">
+                            <span>总数: <strong>${stats.total}</strong></span>
+                            <span>空闲: <strong>${stats.available}</strong></span>
+                            <span>忙碌: <strong>${stats.busy}</strong></span>
+                            <span>故障: <strong>${stats.fault}</strong></span>
+                            <span>离线: <strong>${stats.offline}</strong></span>
+                        </div>
+                    </div>
+                    
+                    <div class="pile-list">
+                        <h3>快充桩 (${fastPiles.length})</h3>
+                        <div class="pile-grid">
+                `;
+                
+                // 显示快充桩
+                fastPiles.forEach(pile => {
+                    html += createPileCard(pile);
+                });
+                
+                html += `
+                        </div>
+                        
+                        <h3>慢充桩 (${slowPiles.length})</h3>
+                        <div class="pile-grid">
+                `;
+                
+                // 显示慢充桩
+                slowPiles.forEach(pile => {
+                    html += createPileCard(pile);
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+                
+                // 渲染HTML
+                container.innerHTML = html;
+                
+                // 添加事件监听器
+                document.querySelectorAll('.power-on-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const pileCode = e.target.getAttribute('data-pile');
+                        handlePowerOn(pileCode);
+                    });
+                });
+                
+                document.querySelectorAll('.shutdown-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const pileCode = e.target.getAttribute('data-pile');
+                        handleShutdown(pileCode);
+                    });
+                });
+                
+            } catch (error) {
+                console.error('加载充电桩状态失败:', error);
+                loadingElem.style.display = 'none';
+                container.innerHTML = '<p class="error-message">加载充电桩状态失败，请稍后重试。</p>';
+            }
+        }
+        
+        // 创建充电桩卡片HTML
+        function createPileCard(pile) {
+            const statusClass = pile.status.toLowerCase();
+            let statusText = '';
+            switch (pile.status) {
+                case 'AVAILABLE': statusText = '空闲'; break;
+                case 'BUSY': statusText = '忙碌'; break;
+                case 'FAULT': statusText = '故障'; break;
+                case 'OFFLINE': statusText = '离线'; break;
+                default: statusText = pile.status;
+            }
+            
+            let buttons = '';
+            if (pile.status === 'OFFLINE') {
+                buttons = `<button class="btn btn-sm power-on-btn" data-pile="${pile.code}">启用</button>`;
+            } else if (pile.status === 'AVAILABLE' || pile.status === 'BUSY') {
+                buttons = `<button class="btn btn-sm btn-danger shutdown-btn" data-pile="${pile.code}">禁用</button>`;
+            }
+
+            // 根据状态显示不同的详情
+            let details = '';
+            if (pile.status === 'BUSY' && pile.charging_car) {
+                const car = pile.charging_car;
+                const progress = car.charged_kwh && car.amount_kwh ? (car.charged_kwh / car.amount_kwh * 100).toFixed(1) : 0;
+                details = `
+                    <p>充电中: 编号 ${car.queue_number}</p>
+                    <p>进度: ${car.charged_kwh ? car.charged_kwh.toFixed(2) : '0'} kWh / ${car.amount_kwh ? car.amount_kwh.toFixed(2) : '0'} kWh (${progress}%)</p>
+                    <p>队列长度: ${pile.queuing_cars ? pile.queuing_cars.length : 0}</p>
+                `;
+            } else {
+                details = `
+                    <p>功率: ${pile.power} kW</p>
+                    <p>累计充电: ${pile.total_charge_amount ? pile.total_charge_amount.toFixed(2) : '0'} kWh</p>
+                    <p>累计次数: ${pile.total_charge_count || 0} 次</p>
+                `;
+            }
+            
+            return `
+                <div class="pile-card">
+                    <div class="status ${statusClass}">${pile.code} - ${statusText}</div>
+                    ${details}
+                    <div class="actions">
+                        ${buttons}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 启用充电桩
+        async function handlePowerOn(pileCode) {
+            try {
+                if (confirm(`确定要启用充电桩 ${pileCode} 吗？`)) {
+                    await API.admin.powerOnPile(pileCode);
+                    alert(`充电桩 ${pileCode} 已启用`);
+                    loadPileStatus(); // 重新加载状态
+                }
+            } catch (error) {
+                console.error('启用充电桩失败:', error);
+                alert(`启用充电桩失败: ${error.message || '未知错误'}`);
+            }
+        }
+        
+        // 禁用充电桩
+        async function handleShutdown(pileCode) {
+            try {
+                // 创建一个自定义对话框，让用户选择故障恢复策略
+                const strategy = await new Promise((resolve) => {
+                    // 创建对话框元素
+                    const dialog = document.createElement('div');
+                    dialog.style.position = 'fixed';
+                    dialog.style.top = '0';
+                    dialog.style.left = '0';
+                    dialog.style.width = '100%';
+                    dialog.style.height = '100%';
+                    dialog.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                    dialog.style.zIndex = '1000';
+                    dialog.style.display = 'flex';
+                    dialog.style.justifyContent = 'center';
+                    dialog.style.alignItems = 'center';
+                    
+                    // 对话框内容
+                    dialog.innerHTML = `
+                        <div style="background: white; padding: 20px; border-radius: 5px; max-width: 400px; width: 100%;">
+                            <h3>禁用充电桩 ${pileCode}</h3>
+                            <p>确定要禁用此充电桩吗？如果有车辆正在充电，将会停止计费并生成详单。</p>
+                            <div style="margin: 15px 0;">
+                                <p><strong>请选择故障恢复策略：</strong></p>
+                                <div style="margin: 10px 0;">
+                                    <input type="radio" id="priority" name="strategy" value="priority" checked>
+                                    <label for="priority">优先级调度 - 优先为故障充电桩队列提供调度</label>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <input type="radio" id="time_order" name="strategy" value="time_order">
+                                    <label for="time_order">时间顺序调度 - 按照排队号码先后顺序重新调度</label>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+                                <button id="cancel-btn" style="padding: 8px 15px; border: none; background: #ccc; border-radius: 4px; cursor: pointer;">取消</button>
+                                <button id="confirm-btn" style="padding: 8px 15px; border: none; background: #dc3545; color: white; border-radius: 4px; cursor: pointer;">确认禁用</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 添加到文档
+                    document.body.appendChild(dialog);
+                    
+                    // 绑定事件
+                    document.getElementById('cancel-btn').addEventListener('click', () => {
+                        document.body.removeChild(dialog);
+                        resolve(null);
+                    });
+                    
+                    document.getElementById('confirm-btn').addEventListener('click', () => {
+                        const selectedStrategy = document.querySelector('input[name="strategy"]:checked').value;
+                        document.body.removeChild(dialog);
+                        resolve(selectedStrategy);
+                    });
+                });
+                
+                // 如果用户取消了操作
+                if (!strategy) {
+                    return;
+                }
+                
+                // 发送禁用请求
+                await API.admin.shutdownPile(pileCode, strategy);
+                alert(`充电桩 ${pileCode} 已禁用，使用 ${strategy === 'priority' ? '优先级' : '时间顺序'} 调度策略`);
+                loadPileStatus(); // 重新加载状态
+            } catch (error) {
+                console.error('禁用充电桩失败:', error);
+                alert(`禁用充电桩失败: ${error.message || '未知错误'}`);
+            }
+        }
+        
+        // 加载系统参数
+        async function loadSystemParams() {
+            try {
+                const response = await API.admin.getSystemParams();
+                
+                // 显示同步状态
+                const syncStatus = document.getElementById('sync-status');
+                if (response.is_synced) {
+                    syncStatus.className = 'sync-ok';
+                    syncStatus.innerHTML = '✓ 数据库参数与配置文件同步';
+                } else {
+                    syncStatus.className = 'sync-warning';
+                    syncStatus.innerHTML = '⚠ 警告: 数据库参数与配置文件不同步，建议保存一次以同步';
+                }
+                syncStatus.style.display = 'block';
+                
+                                 // 更新表单中的当前值和输入框默认值
+                 if (response.db_params.FastChargingPileNum) {
+                     document.getElementById('current-FastChargingPileNum').textContent = response.db_params.FastChargingPileNum.value;
+                     document.getElementById('FastChargingPileNum').value = response.db_params.FastChargingPileNum.value;
+                 }
+                 if (response.db_params.TrickleChargingPileNum) {
+                     document.getElementById('current-TrickleChargingPileNum').textContent = response.db_params.TrickleChargingPileNum.value;
+                     document.getElementById('TrickleChargingPileNum').value = response.db_params.TrickleChargingPileNum.value;
+                 }
+                 if (response.db_params.WaitingAreaSize) {
+                     document.getElementById('current-WaitingAreaSize').textContent = response.db_params.WaitingAreaSize.value;
+                     document.getElementById('WaitingAreaSize').value = response.db_params.WaitingAreaSize.value;
+                 }
+                 if (response.db_params.ChargingQueueLen) {
+                     document.getElementById('current-ChargingQueueLen').textContent = response.db_params.ChargingQueueLen.value;
+                     document.getElementById('ChargingQueueLen').value = response.db_params.ChargingQueueLen.value;
+                 }
+            } catch (error) {
+                console.error('加载系统参数失败:', error);
+                alert(`加载系统参数失败: ${error.message || '未知错误'}`);
+            }
+        }
+        
+        // 更新系统参数
+        async function updateSystemParams() {
+            try {
+                // 收集参数值
+                const params = {
+                    fast_charging_pile_num: parseInt(document.getElementById('FastChargingPileNum')?.value || '0'),
+                    trickle_charging_pile_num: parseInt(document.getElementById('TrickleChargingPileNum')?.value || '0'),
+                    waiting_area_size: parseInt(document.getElementById('WaitingAreaSize')?.value || '0'),
+                    charging_queue_len: parseInt(document.getElementById('ChargingQueueLen')?.value || '0'),
+                    reload_config: true // 自动重新加载配置
+                };
+                
+                // 发送更新请求
+                const response = await API.admin.updateSystemParams(params);
+                
+                if (response.success) {
+                    alert(`系统参数已更新，共更新了 ${Object.keys(response.updated_params).length} 个参数`);
+                    // 重新加载参数显示
+                    loadSystemParams();
+                    // 重新加载充电桩状态
+                    loadPileStatus();
+                } else {
+                    alert('系统参数更新失败');
+                }
+                
+            } catch (error) {
+                console.error('更新系统参数失败:', error);
+                alert(`更新系统参数失败: ${error.message || '未知错误'}`);
+            }
+        }
+        
+        // 重新加载配置
+        async function reloadConfig() {
+            try {
+                const response = await API.admin.reloadConfig();
+                
+                if (response.success) {
+                    alert('系统配置已重新加载');
+                    // 重新加载参数显示
+                    loadSystemParams();
+                    // 重新加载充电桩状态
+                    loadPileStatus();
+                } else {
+                    alert('重新加载系统配置失败');
+                }
+                
+            } catch (error) {
+                console.error('重新加载系统配置失败:', error);
+                alert(`重新加载系统配置失败: ${error.message || '未知错误'}`);
+            }
+        }
+    </script>
+</body>
+</html>

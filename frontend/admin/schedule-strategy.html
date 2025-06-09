@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调度策略管理 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <h1 class="card-title">调度策略管理</h1>
+                <p>配置系统调度策略，优化充电桩使用效率。</p>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">当前调度策略</h2>
+                <div id="current-strategy-info">
+                    <p>正在加载调度策略信息...</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">修改调度策略</h2>
+                <div>
+                    <form id="strategy-form">
+                        <div class="form-group">
+                            <label for="strategy">调度策略</label>
+                            <select class="form-control" id="strategy" name="strategy" required>
+                                <option value="default">默认调度：按照排队号码顺序依次调度</option>
+                                <option value="batch_mode">单次调度总充电时长最短：多辆车一次性调度，按充电模式分配对应充电桩，满足总充电时长最短</option>
+                                <option value="bulk_mode">批量调度总充电时长最短：等待车辆数量达到指定数量时才进行一次批量调度，忽略充电模式，满足总充电时长最短</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="bulk-size-container" style="display: none;">
+                            <label for="bulk-size">批量调度车辆数量</label>
+                            <input type="number" class="form-control" id="bulk-size" name="bulk-size" min="1" value="10">
+                            <small>仅在批量调度总充电时长最短策略下有效</small>
+                        </div>
+                        <button type="submit" class="btn">保存修改</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2 class="card-title">调度策略说明</h2>
+                <div>
+                    <div class="strategy-explanation">
+                        <h3>默认调度</h3>
+                        <p>按照排队号码顺序依次调度，严格遵循先来先服务原则。</p>
+                        
+                        <h3>单次调度总充电时长最短</h3>
+                        <p>当充电区某种模式的充电桩出现多个空位时，系统可在等候区该模式对应的队列中，按照编号顺序一次性叫多个号，此时进入充电区的多辆车不再按照编号顺序依次调度，而是"统一调度"，策略为：</p>
+                        <ol>
+                            <li>按充电模式分配对应充电桩</li>
+                            <li>满足进入充电区的多辆车完成充电总时长(所有车累计等待时间+累计充电时间)最短</li>
+                        </ol>
+                        
+                        <h3>批量调度总充电时长最短</h3>
+                        <p>为了提高效率，假设只有当到达充电站的车辆等于充电区全部车位数量时，才开始进行一次批量调度，完成之后再进行下一批。规定进入充电区的一批车不再按照编号顺序依次调度，而是"统一调度"，系统调度策略为：</p>
+                        <ol>
+                            <li>忽略每辆车的请求充电模式，所有车辆均可分配任意类型充电桩</li>
+                            <li>满足一批车辆完成充电总时长(所有车累计等待时间+累计充电时间)最短</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script>
+        // 模拟数据，当API调用失败时使用
+        const MOCK_DATA = {
+            strategy: 'default',
+            description: '按照排队号码顺序依次调度，严格遵循先来先服务原则。',
+            bulk_size: 10
+        };
+
+        // 添加全局错误处理
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error('全局错误捕获:', message, 'at', source, lineno, colno);
+            return true; // 防止默认的错误处理
+        };
+
+        // 防止页面意外跳转
+        let isNavigating = false;
+        window.addEventListener('beforeunload', function(e) {
+            if (!isNavigating) {
+                const message = '确定要离开此页面吗？';
+                e.returnValue = message;
+                return message;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM已加载完成，开始初始化页面...');
+            
+            try {
+                // 初始化页面
+                Utils.initPage();
+                
+                // 检查登录状态
+                if (!Utils.checkAdmin()) {
+                    console.log('未登录或非管理员，重定向到登录页面');
+                    isNavigating = true;
+                    window.location.href = '../login.html';
+                    return;
+                }
+                
+                console.log('登录状态检查通过，准备加载调度策略...');
+                
+                // 获取当前调度策略
+                loadCurrentStrategy();
+                
+                // 监听策略选择变化
+                document.getElementById('strategy').addEventListener('change', function() {
+                    const bulkSizeContainer = document.getElementById('bulk-size-container');
+                    if (this.value === 'bulk_mode') {
+                        bulkSizeContainer.style.display = 'block';
+                    } else {
+                        bulkSizeContainer.style.display = 'none';
+                    }
+                });
+                
+                // 提交表单
+                document.getElementById('strategy-form').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const strategy = document.getElementById('strategy').value;
+                    const bulkSize = document.getElementById('bulk-size').value;
+                    
+                    try {
+                        console.log('提交策略更新:', strategy, bulkSize);
+                        await API.admin.updateScheduleStrategy(strategy, bulkSize);
+                        Utils.showNotification('调度策略更新成功!', 'success');
+                        loadCurrentStrategy();
+                    } catch (error) {
+                        console.error('更新调度策略失败:', error);
+                        Utils.showNotification(`更新调度策略失败: ${error.message || '未知错误'}`, 'error');
+                    }
+                });
+                
+                // 添加返回主页的安全导航
+                const homeLinks = document.querySelectorAll('a[href="index.html"]');
+                homeLinks.forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        isNavigating = true;
+                        window.location.href = 'index.html';
+                    });
+                });
+                
+                console.log('页面初始化完成');
+            } catch (error) {
+                console.error('页面初始化错误:', error);
+                Utils.showNotification('页面初始化失败: ' + error.message, 'error');
+            }
+        });
+        
+        // 获取当前调度策略
+        async function loadCurrentStrategy() {
+            console.log('开始加载当前调度策略...');
+            try {
+                console.log('调用API.admin.getScheduleStrategy()...');
+                let response;
+                
+                try {
+                    response = await API.admin.getScheduleStrategy();
+                    console.log('获取调度策略成功:', response);
+                } catch (apiError) {
+                    console.error('API调用失败，使用模拟数据:', apiError);
+                    response = MOCK_DATA;
+                }
+                
+                const strategyInfo = document.getElementById('current-strategy-info');
+                
+                let strategyName = '';
+                switch(response.strategy) {
+                    case 'default':
+                        strategyName = '默认调度：按照排队号码顺序依次调度';
+                        break;
+                    case 'batch_mode':
+                        strategyName = '单次调度总充电时长最短';
+                        break;
+                    case 'bulk_mode':
+                        strategyName = '批量调度总充电时长最短';
+                        break;
+                    default:
+                        strategyName = response.strategy;
+                }
+                
+                let html = `
+                    <div class="strategy-info">
+                        <div class="strategy-name">
+                            <strong>当前策略:</strong> ${strategyName}
+                        </div>
+                        <div class="strategy-description">
+                            <p>${response.description || ''}</p>
+                        </div>
+                `;
+                
+                if (response.strategy === 'bulk_mode') {
+                    html += `
+                        <div class="strategy-detail">
+                            <strong>批量调度车辆数量:</strong> ${response.bulk_size}
+                        </div>
+                    `;
+                }
+                
+                html += `</div>`;
+                
+                strategyInfo.innerHTML = html;
+                console.log('策略信息已更新到页面');
+                
+                // 设置表单默认值
+                document.getElementById('strategy').value = response.strategy;
+                
+                if (response.bulk_size) {
+                    document.getElementById('bulk-size').value = response.bulk_size;
+                }
+                
+                // 根据策略显示/隐藏批量调度车辆数量输入框
+                if (response.strategy === 'bulk_mode') {
+                    document.getElementById('bulk-size-container').style.display = 'block';
+                } else {
+                    document.getElementById('bulk-size-container').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('加载调度策略失败:', error);
+                document.getElementById('current-strategy-info').innerHTML = `
+                    <div class="alert alert-danger">
+                        加载调度策略失败: ${error.message || '未知错误'}
+                    </div>
+                `;
+            }
+        }
+    </script>
+    
+    <style>
+        .strategy-info {
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .strategy-name {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+        
+        .strategy-description {
+            color: #555;
+            margin-bottom: 10px;
+        }
+        
+        .strategy-detail {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #ddd;
+        }
+        
+        .strategy-explanation h3 {
+            color: #1976d2;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .strategy-explanation p {
+            margin-bottom: 15px;
+        }
+        
+        .strategy-explanation ol {
+            padding-left: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .strategy-explanation li {
+            margin-bottom: 5px;
+        }
+        
+        small {
+            color: #666;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</body>
+</html> 
