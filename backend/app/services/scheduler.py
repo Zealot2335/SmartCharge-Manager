@@ -470,6 +470,31 @@ class ChargingScheduler:
         old_status = request.status
         old_pile_id = request.pile_id
         
+        # 如果是充电中状态，需要结算账单
+        if old_status == RequestStatus.CHARGING and old_pile_id:
+            active_session = db.query(ChargeSession).filter(
+                ChargeSession.request_id == request_id, 
+                ChargeSession.status == "CHARGING"
+            ).first()
+            
+            if active_session:
+                logger.info(f"Request {request_id} was in CHARGING state. Interrupting charging session {active_session.id}.")
+                
+                # 计算已充电量
+                pile = db.query(ChargePile).filter(ChargePile.id == old_pile_id).first()
+                if pile and request.start_time:
+                    charging_hours = (datetime.now() - request.start_time).total_seconds() / 3600
+                    charged_kwh = min(request.amount_kwh, pile.power * charging_hours)
+                    
+                    # 中断充电会话并结算
+                    BillingService.interrupt_charge_session(db, active_session.id, charged_kwh)
+                    logger.info(f"Charging session {active_session.id} interrupted with {charged_kwh:.2f} kWh charged.")
+                else:
+                    logger.warning(f"Could not calculate charged amount for request {request_id}. Using session interrupt with default calculation.")
+                    BillingService.interrupt_charge_session(db, active_session.id)
+            else:
+                logger.warning(f"Could not find an active charging session for request {request_id}.")
+
         # 记录取消日志
         queue_log = QueueLog(
             request_id=request.id, from_status=old_status, to_status=RequestStatus.CANCELED,
@@ -481,6 +506,7 @@ class ChargingScheduler:
         request.status = RequestStatus.CANCELED
         request.pile_id = None
         request.queue_position = None
+        request.end_time = datetime.now()
 
         db.commit()
         logger.info(f"Request {request_id} status set to CANCELED.")

@@ -183,8 +183,8 @@
                                         ? `<button class="btn btn-sm btn-secondary change-mode-btn" data-id="${request.id}" data-mode="${request.mode}">修改模式</button>` +
                                           `<button class="btn btn-sm btn-info change-amount-btn" data-id="${request.id}" data-current-amount="${request.amount_kwh}" data-battery-capacity="${request.battery_capacity}">修改电量</button>`
                                         : ''}
-                                    ${request.status === 'WAITING' || request.status === 'QUEUING'
-                                        ? `<button class="btn btn-sm btn-danger cancel-btn" data-id="${request.id}">取消</button>`
+                                    ${request.status === 'WAITING' || request.status === 'QUEUING' || request.status === 'CHARGING'
+                                        ? `<button class="btn btn-sm btn-danger cancel-btn" data-id="${request.id}" data-status="${request.status}">取消</button>`
                                         : ''}
                                 </div>
                             </td>
@@ -292,7 +292,14 @@
             document.querySelectorAll('.cancel-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const id = e.target.dataset.id;
-                    if (confirm('您确定要取消这个充电请求吗？')) {
+                    const status = e.target.dataset.status;
+                    let confirmMessage = '您确定要取消这个充电请求吗？';
+                    
+                    if (status === 'CHARGING') {
+                        confirmMessage = '您确定要取消正在充电中的请求吗？这将结束充电并按照已充电量计费。';
+                    }
+                    
+                    if (confirm(confirmMessage)) {
                         try {
                             await API.charging.cancelRequest(id);
                             Utils.showToast('请求已取消');
