@@ -190,6 +190,7 @@
                 loadStatistics();
                 loadPileStatus();
                 loadQueueStatus();
+                updateWaitingAreaStatus();
             }, 5000); // 每5秒刷新一次
             
             // 连接WebSocket
@@ -528,7 +529,7 @@
         // 更新等候区状态
         async function updateWaitingAreaStatus() {
             try {
-                const data = await API.admin.getWaitingAreaStatus();
+                const data = await API.charging.getWaitingAreaStatus();
                 if (data) {
                     document.getElementById('waiting-count').textContent = data.waiting_count;
                     document.getElementById('waiting-capacity').textContent = data.capacity;
