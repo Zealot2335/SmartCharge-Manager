@@ -41,35 +41,35 @@ const request = async (endpoint, method = 'GET', data = null) => {
 
     try {
         const response = await fetch(url, options);
-        
+
         // 检查Token是否过期
         if (response.status === 401) {
             // 清除本地存储的凭证
             logout();
-            
+
             // 重定向到登录页面
             window.location.href = '/login.html';
             throw new Error('身份验证已过期，请重新登录');
         }
-        
+
         // 解析响应
         if (response.headers.get('content-type')?.includes('application/json')) {
             const result = await response.json();
-            
+
             // 检查API错误
             if (!response.ok) {
                 throw new Error(result.detail || '请求失败');
             }
-            
+
             return result;
         } else {
             const text = await response.text();
-            
+
             // 检查API错误
             if (!response.ok) {
                 throw new Error(text || '请求失败');
             }
-            
+
             return text;
         }
     } catch (error) {
@@ -110,21 +110,21 @@ const auth = {
 
         const result = await response.json();
         // --- 修复结束 ---
-        
+
         // 存储token和用户信息
         if (result.access_token) {
             authToken = result.access_token;
             userId = result.user_id;
             userRole = result.role;
-            
+
             localStorage.setItem('auth_token', result.access_token);
             localStorage.setItem('user_id', result.user_id);
             localStorage.setItem('user_role', result.role);
         }
-        
+
         return result;
     },
-    
+
     /**
      * 用户注册
      * @param {Object} userData - 用户数据
@@ -133,7 +133,7 @@ const auth = {
     register: (userData) => {
         return request('/auth/register', 'POST', userData);
     },
-    
+
     /**
      * 获取当前用户信息
      * @returns {Promise} 用户信息
@@ -141,7 +141,7 @@ const auth = {
     getCurrentUser: () => {
         return request('/auth/me', 'GET');
     },
-    
+
     /**
      * 检查是否已登录
      * @returns {boolean} 是否已登录
@@ -149,7 +149,7 @@ const auth = {
     isLoggedIn: () => {
         return !!authToken;
     },
-    
+
     /**
      * 获取用户角色
      * @returns {string} 用户角色
@@ -157,7 +157,7 @@ const auth = {
     getUserRole: () => {
         return localStorage.getItem('user_role');
     },
-    
+
     /**
      * 是否是管理员
      * @returns {boolean} 是否是管理员
@@ -179,7 +179,7 @@ const charging = {
     createRequest: (requestData) => {
         return request('/charging/request', 'POST', requestData);
     },
-    
+
     /**
      * 获取用户的所有充电请求
      * @param {string} status - 可选，按状态筛选
@@ -189,7 +189,7 @@ const charging = {
         const endpoint = status ? `/charging/requests?status=${status}` : '/charging/requests';
         return request(endpoint, 'GET');
     },
-    
+
     /**
      * 获取充电请求详情
      * @param {number} requestId - 请求ID
@@ -198,7 +198,7 @@ const charging = {
     getRequestDetails: (requestId) => {
         return request(`/charging/${requestId}`, 'GET');
     },
-    
+
     /**
      * 获取充电状态
      * @param {number} requestId - 请求ID
@@ -207,7 +207,7 @@ const charging = {
     getChargeState: (requestId) => {
         return request(`/charging/${requestId}/state`, 'GET');
     },
-    
+
     /**
      * 更新充电请求
      * @param {number} requestId - 请求ID
@@ -217,7 +217,7 @@ const charging = {
     updateRequest: (requestId, updateData) => {
         return request(`/charging/${requestId}`, 'PATCH', updateData);
     },
-    
+
     /**
      * 取消充电请求
      * @param {number} requestId - 请求ID
@@ -226,7 +226,7 @@ const charging = {
     cancelRequest: (requestId) => {
         return request(`/charging/${requestId}`, 'DELETE');
     },
-    
+
     /**
      * 修改充电模式
      * @param {number} requestId - 请求ID
@@ -236,7 +236,7 @@ const charging = {
     changeChargeMode: (requestId, newMode) => {
         return request(`/charging/requests/${requestId}/mode`, 'PUT', { mode: newMode });
     },
-    
+
     /**
      * 修改充电量
      * @param {number} requestId - 请求ID
@@ -246,7 +246,7 @@ const charging = {
     changeChargeAmount: (requestId, newAmount) => {
         return request(`/charging/requests/${requestId}/amount`, 'PATCH', { amount_kwh: newAmount });
     },
-    
+
     /**
      * 获取队列信息
      * @param {string} mode - 充电模式 (FAST/SLOW)
@@ -255,7 +255,7 @@ const charging = {
     getQueueInfo: (mode) => {
         return request(`/charging/queue/${mode}`, 'GET');
     },
-    
+
     /**
      * 获取等候区状态
      * @returns {Promise<any>}
@@ -263,7 +263,7 @@ const charging = {
     getWaitingAreaStatus: async () => {
         return await request('/charging/waiting_area');
     },
-    
+
     /**
      * 模拟充电进度（仅测试用）
      * @param {number} requestId - 请求ID
@@ -287,7 +287,7 @@ const billing = {
     getDailyBill: (date) => {
         return request(`/billing/daily/${date}`, 'GET');
     },
-    
+
     /**
      * 获取账单详情
      * @param {number} sessionId - 会话ID
@@ -297,7 +297,7 @@ const billing = {
         console.log(`Getting bill details for session ID: ${sessionId}`);
         return request(`/billing/bills/${sessionId}`, 'GET');
     },
-    
+
     /**
      * 获取详单信息
      * @param {string} detailNumber - 详单编号
@@ -305,6 +305,33 @@ const billing = {
      */
     getDetailByNumber: (detailNumber) => {
         return request(`/billing/details/${detailNumber}`, 'GET');
+    },
+
+    /**
+     * 获取用户指定月份的所有账单
+     * @param {string} month - 月份 (YYYY-MM)
+     * @returns {Promise} 账单列表
+     */
+    getMonthlyBills: (month) => {
+        return request(`/billing/list/${month}`, 'GET');
+    },
+
+    /**
+     * 获取用户指定日期的账单
+     * @param {string} billDate - 日期 (YYYY-MM-DD)
+     * @returns {Promise} 账单数据
+     */
+    getUserBill: (billDate) => {
+        return request(`/billing/${billDate}`, 'GET');
+    },
+
+    /**
+     * 根据充电会话ID获取账单详情
+     * @param {number} sessionId - 会话ID
+     * @returns {Promise} 账单详情
+     */
+    getBillBySession: (sessionId) => {
+        return request(`/billing/bills/${sessionId}`, 'GET');
     }
 };
 
@@ -319,7 +346,7 @@ const admin = {
     getPiles: () => {
         return request('/admin/pile', 'GET');
     },
-    
+
     /**
      * 启动充电桩
      * @param {string} pileCode - 充电桩编号
@@ -328,7 +355,7 @@ const admin = {
     powerOnPile: (pileCode) => {
         return request(`/admin/pile/${pileCode}/poweron`, 'POST');
     },
-    
+
     /**
      * 关闭充电桩
      * @param {string} pileCode - 充电桩编号
@@ -338,7 +365,7 @@ const admin = {
     shutdownPile: (pileCode, strategy = "priority") => {
         return request(`/admin/pile/${pileCode}/shutdown?strategy=${strategy}`, 'POST');
     },
-    
+
     /**
      * 获取所有充电请求
      * @param {Object} filters - 筛选条件
@@ -347,156 +374,33 @@ const admin = {
     getAllRequests: (filters = {}) => {
         let endpoint = '/admin/requests';
         const params = new URLSearchParams();
-        
+
         for (const key in filters) {
             if (filters[key]) {
                 params.append(key, filters[key]);
             }
         }
-        
+
         if (params.toString()) {
             endpoint += `?${params.toString()}`;
         }
-        
+
         return request(endpoint, 'GET');
     },
-    
+
     /**
      * 获取费率规则
      * @returns {Promise} 费率规则列表
      */
     getRates: () => {
         return request('/admin/rates', 'GET');
-    },
-    
-    /**
-     * 更新费率规则
-     * @param {number} rateId - 费率规则ID
-     * @param {Object} updateData - 更新数据
-     * @returns {Promise} 更新结果
-     */
-    updateRate: (rateId, updateData) => {
-        return request(`/admin/rates/${rateId}`, 'PATCH', updateData);
-    },
-    
-    /**
-     * 获取服务费率
-     * @returns {Promise} 服务费率
-     */
-    getServiceRate: () => {
-        return request('/admin/service-rate', 'GET');
-    },
-    
-    /**
-     * 更新服务费率
-     * @param {Object} updateData - 更新数据
-     * @returns {Promise} 更新结果
-     */
-    updateServiceRate: (updateData) => {
-        return request('/admin/service-rate', 'PATCH', updateData);
-    },
-    
-    /**
-     * 获取日报表
-     * @param {string} date - 日期 (YYYY-MM-DD)
-     * @returns {Promise} 报表数据
-     */
-    getDailyReport: (date) => {
-        return request(`/admin/reports/daily/${date}`, 'GET');
-    },
-    
-    /**
-     * 获取周报表
-     * @param {string} dateInWeek - 周内任意日期 (YYYY-MM-DD)
-     * @returns {Promise} 报表数据
-     */
-    getWeeklyReport: (dateInWeek) => {
-        return request(`/admin/reports/weekly?date_in_week=${dateInWeek}`, 'GET');
-    },
-    
-    /**
-     * 获取月报表
-     * @param {number} year - 年份
-     * @param {number} month - 月份 (1-12)
-     * @returns {Promise} 报表数据
-     */
-    getMonthlyReport: (year, month) => {
-        return request(`/admin/reports/monthly?year=${year}&month=${month}`, 'GET');
-    },
-    
-    /**
-     * 获取故障日志
-     * @returns {Promise} 故障日志列表
-     */
-    getFaultLogs: () => {
-        return request('/admin/faults', 'GET');
-    },
-    
-    /**
-     * 报告故障
-     * @param {Object} faultData - 故障数据
-     * @returns {Promise} 报告结果
-     */
-    reportFault: (faultData) => {
-        return request('/admin/faults', 'POST', faultData);
-    },
-    
-    /**
-     * 故障恢复
-     * @param {number} faultId - 故障ID
-     * @returns {Promise} 恢复结果
-     */
-    resolveFault: (faultId) => {
-        return request(`/admin/faults/${faultId}/resolve`, 'POST');
-    },
-    
-    /**
-     * 获取当前调度策略
-     * @returns {Promise} 当前调度策略
-     */
-    getScheduleStrategy: () => {
-        return request('/admin/schedule-strategy', 'GET');
-    },
-    
-    /**
-     * 更新调度策略
-     * @param {string} strategy - 调度策略 (default: 默认调度, batch_mode: 单次调度总充电时长最短, bulk_mode: 批量调度总充电时长最短)
-     * @param {number} bulkSize - 批量调度时的车辆数量，仅在bulk_mode模式下有效
-     * @returns {Promise} 更新结果
-     */
-    updateScheduleStrategy: (strategy, bulkSize = 10) => {
-        return request(`/admin/schedule-strategy?strategy=${strategy}&bulk_size=${bulkSize}`, 'PATCH');
-    },
-
-    /**
-     * 获取等候区状态
-     * @returns {Promise<any>} 等候区状态信息
-     */
-    getWaitingAreaStatus: async () => {
-        return await request('/admin/waiting_area');
-    },
+    }
 };
 
-/**
- * 退出登录
- */
-function logout() {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('user_role');
-    authToken = null;
-    userId = null;
-    userRole = null;
-}
-
-// 导出API服务
-const API = {
+// 挂载API对象到全局
+window.API = {
     auth,
     charging,
     billing,
-    admin,
-    logout
+    admin
 };
-
-// 全局导出
-window.API = API; 

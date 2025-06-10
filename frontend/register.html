@@ -122,7 +122,11 @@
                 submitBtn.innerHTML = '<span class="loading"></span> 注册中...';
 
                 // 提交注册请求
-                const result = await API.auth.register(username, password);
+                const userData = {
+                    username: username,
+                    password: password
+                };
+                const result = await API.auth.register(userData);
 
                 // 注册成功
                 showNotification('注册成功，请登录', 'success');

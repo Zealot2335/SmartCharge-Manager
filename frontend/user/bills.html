@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>账单管理 - 智能充电桩调度计费系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <!-- 导航栏 -->
+    <header class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">智能充电桩调度计费系统</a>
+            <ul class="navbar-menu">
+                <!-- 由JS动态填充 -->
+            </ul>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1 class="card-title">账单管理</h1>
+                    <button id="refresh-btn" class="btn">刷新数据</button>
+                </div>
+
+                <div id="bills-list" class="loading-container">
+                    <p>正在加载账单列表...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <!-- 由JS动态填充 -->
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script>
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 检查授权
+            if (!Utils.checkAuth()) {
+                return;
+            }
+
+            // 初始化页面
+            Utils.initPage();
+
+            // 加载账单列表
+            loadBillsList();
+
+            // 绑定刷新按钮
+            // 绑定刷新按钮
+            const refreshBtn = document.getElementById('refresh-btn');
+            console.log('refreshBtn:', refreshBtn); // 确认按钮元素是否获取成功
+            if (refreshBtn) {
+                try {
+                    refreshBtn.addEventListener('click', () => {
+                        console.log('刷新按钮被点击，开始加载账单列表'); // 确认点击事件是否触发
+                        loadBillsList();
+                    });
+                } catch (error) {
+                    console.error('绑定刷新按钮事件失败:', error);
+                }
+            } else {
+                console.error('未找到 ID 为 refresh-btn 的按钮');
+            }
+        });
+
+        // 加载账单列表
+        async function loadBillsList() {
+            const billsListContainer = document.getElementById('bills-list');
+
+            try {
+                // 获取当前日期
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const date = `${year}-${month}`;
+
+                // 获取该月的所有账单
+                const bills = await API.billing.getMonthlyBills(date);
+
+                // 显示账单列表
+                let html = '<div class="bills-info">';
+                if (bills.bills && bills.bills.length > 0) {
+                    bills.bills.forEach(bill => {
+                        html += `
+                    <div class="bill-item">
+                        <div class="grid">
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>账单日期:</label>
+                                    <span>${bill.bill_date}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>累计充电量:</label>
+                                    <span>${Utils.formatKwh(bill.total_kwh)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>充电费用:</label>
+                                    <span>¥${Utils.formatMoney(bill.total_charge_fee)}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-group">
+                                    <label>服务费用:</label>
+                                    <span>¥${Utils.formatMoney(bill.total_service_fee)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <label>总费用:</label>
+                                    <span>¥${Utils.formatMoney(bill.total_fee)}</span>
+                                </div>
+                                <div class="info-group">
+                                    <button class="btn" onclick="loadBillDetails('${bill.bill_date}')">查看详情</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                    });
+                } else {
+                    html += '<p class="error">无账单记录</p>';
+                }
+                html += '</div>';
+
+                billsListContainer.innerHTML = html;
+            } catch (error) {
+                console.error('加载账单列表失败:', error);
+                billsListContainer.innerHTML = '<p class="error">加载账单列表失败，请稍后再试</p>';
+            }
+        }
+
+        // 加载账单详情
+        async function loadBillDetails(billDate) {
+            try {
+                // 获取指定日期的账单详情
+                const bill = await API.billing.get_user_bill(billDate);
+
+                // 显示账单详情，这里可以弹出一个模态框显示详情，暂简单打印
+                console.log("账单详情:", bill);
+            } catch (error) {
+                console.error('加载账单详情失败:', error);
+            }
+        }
+    </script>
+</body>
+
+</html>

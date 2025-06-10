@@ -21,9 +21,17 @@ def test_login():
     global TOKEN
     
     # 测试管理员登录
+    data = {
+        "username": "admin",
+        "password": "admin"
+    }
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
     response = requests.post(
         f"{BASE_URL}/auth/login",
-        json={"username": "admin", "password": "admin"}
+        headers=headers,
+        data=data
     )
     print_result("管理员登录", response)
     
@@ -32,9 +40,14 @@ def test_login():
         print(f"获取Token: {TOKEN}")
     
     # 测试普通用户登录
+    data = {
+        "username": "user",
+        "password": "admin"
+    }
     response = requests.post(
         f"{BASE_URL}/auth/login",
-        json={"username": "user", "password": "admin"}
+        headers=headers,
+        data=data
     )
     print_result("用户登录", response)
 
