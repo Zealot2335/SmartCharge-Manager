@@ -401,3 +401,36 @@ class ChargingService:
                 return False, message
             
         return True, f"成功更新充电进度: {progress_percent}%" 
+    
+    @staticmethod
+    def cancel_charge_request(db: Session, request_id: int) -> Tuple[bool, str]:
+        """
+        取消充电请求（等候区或充电区均可）
+        """
+        # 查询充电请求
+        request = db.query(CarRequest).filter(CarRequest.id == request_id).first()
+        if not request:
+            return False, "充电请求不存在"
+
+        # 只有在等候区或充电区才能取消
+        if request.status not in [RequestStatus.WAITING, RequestStatus.CHARGING]:
+            return False, f"当前状态不可取消: {request.status}"
+
+        # 修改状态为已取消
+        request.status = RequestStatus.CANCELED
+
+        # 如果在充电区，结束充电会话
+        if request.status == RequestStatus.CHARGING:
+            session = db.query(ChargeSession).filter(ChargeSession.request_id == request.id).first()
+            if session and session.status == "CHARGING":
+                session.status = "CANCELED"
+                session.end_time = datetime.now()
+
+        db.commit()
+        logger.info(f"取消充电请求: 请求ID={request_id}")
+        return True, "充电请求已取消"
+    
+    def dispatch(self, db: Session, request: CarRequest):
+        """调用调度器完成分配"""
+        scheduler = ChargingScheduler()
+        return scheduler.select_optimal_pile(db, request) 

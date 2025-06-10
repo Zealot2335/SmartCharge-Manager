@@ -303,7 +303,8 @@
                         try {
                             await API.charging.cancelRequest(id);
                             Utils.showToast('请求已取消');
-                            loadRequests(); // 重新加载
+                            // loadRequests(); // 重新加载
+                            window.dispatchEvent(new CustomEvent('charge-request-updated'));
                         } catch (error) {
                             Utils.showToast(`取消失败: ${error.message}`, 'error');
                         }
@@ -324,7 +325,8 @@
                         try {
                             await API.charging.changeChargeMode(id, newMode);
                             Utils.showToast('充电模式修改成功，已重新排队');
-                            loadRequests(); // 重新加载
+                            // loadRequests(); // 重新加载
+                            window.dispatchEvent(new CustomEvent('charge-request-updated'));
                         } catch (error) {
                             Utils.showToast(`修改模式失败: ${error.message}`, 'error');
                         }
@@ -365,7 +367,8 @@
                     try {
                         await API.charging.changeChargeAmount(id, newAmount);
                         Utils.showToast('充电量修改成功');
-                        loadRequests();
+                        // loadRequests();
+                        window.dispatchEvent(new CustomEvent('charge-request-updated'));
                     } catch (error) {
                         Utils.showToast(`修改电量失败: ${error.message}`, 'error');
                     }
