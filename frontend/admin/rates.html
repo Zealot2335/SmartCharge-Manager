@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>费率规则管理</title>
+    <script src="/static/js/api.js"></script>
+    <script>
+        async function loadRates() {
+            try {
+                const rates = await API.billing.getRates();
+                const rateList = document.getElementById('rate-list');
+                rates.forEach(rate => {
+                    const li = document.createElement('li');
+                    li.textContent = `ID: ${rate.id}, 类型: ${rate.type}, 费率: ${rate.rate}`;
+                    rateList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('加载费率规则列表失败:', error);
+            }
+        }
+
+        window.onload = loadRates;
+    </script>
+</head>
+
+<body>
+    <h1>费率规则管理</h1>
+    <ul id="rate-list"></ul>
+</body>
+
+</html>

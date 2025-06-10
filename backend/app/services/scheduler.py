@@ -640,15 +640,19 @@ class ChargingScheduler:
             db.rollback()
 
     @staticmethod
-    def get_available_piles(db: Session, mode: ChargeMode) -> List[ChargePile]:
-        """获取指定模式下可用的充电桩(状态为可用或繁忙)"""
+    def get_available_piles_for_dispatch(db: Session, mode: ChargeMode) -> List[ChargePile]:
+        """获取指定模式下可用于调度的充电桩 (状态为可用或繁忙，且队列未满)"""
         pile_type = "FAST" if mode == ChargeMode.FAST else "SLOW"
-        return (
-            db.query(ChargePile)
-            .filter(ChargePile.type == pile_type)
-            .filter(ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY]))
-            .all()
-        )
+        all_piles = db.query(ChargePile).filter(
+            ChargePile.type == pile_type,
+            ChargePile.status.in_([PileStatus.AVAILABLE, PileStatus.BUSY])
+        ).all()
+
+        available_piles = []
+        for pile in all_piles:
+            if ChargingScheduler.check_pile_queue_available(db, pile.id):
+                available_piles.append(pile)
+        return available_piles
 
     @staticmethod
     def schedule_request(db: Session, request_id: int) -> bool:

@@ -1,3 +1,4 @@
+-- Active: 1732451437396@@127.0.0.1@3306@smart_charge
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS smart_charge DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE smart_charge;
@@ -213,12 +214,3 @@ INSERT INTO t_config (config_key, config_value, description) VALUES
 ('SlowPower', '7', '单桩功率(慢充) kWh/h'),
 ('ServiceRate', '0.8', '服务费单价 元/kWh');
 
--- 初始化管理员账户
-INSERT INTO t_user (user_id, username, password, role) VALUES 
-('admin', 'admin', MD5('admin123'), 'ADMIN'),
-('iluvse', 'iluvse', MD5('iluvse'), 'ADMIN');
-
--- 初始化测试用户
-INSERT INTO t_user (user_id, username, password, role) VALUES 
-('user1', 'user1', MD5('user123'), 'USER'),
-('user2', 'user2', MD5('user123'), 'USER'); 

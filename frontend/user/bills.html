@@ -31,6 +31,7 @@
                 <div id="bills-list" class="loading-container">
                     <p>正在加载账单列表...</p>
                 </div>
+                <div id="bill-detail-view" style="display:none;"></div>
             </div>
         </div>
     </main>
@@ -86,6 +87,10 @@
         // 加载账单列表
         async function loadBillsList() {
             const billsListContainer = document.getElementById('bills-list');
+            if (!billsListContainer) {
+                console.error('未找到账单列表容器');
+                return;
+            }
 
             try {
                 // 获取当前日期
@@ -96,51 +101,54 @@
 
                 // 获取该月的所有账单
                 const bills = await API.billing.getMonthlyBills(date);
+                console.log('获取到的账单数据:', bills); // 打印响应数据
 
                 // 显示账单列表
                 let html = '<div class="bills-info">';
-                if (bills.bills && bills.bills.length > 0) {
-                    bills.bills.forEach(bill => {
+                if (Array.isArray(bills) && bills.length > 0) {
+                    bills.forEach(bill => {
                         html += `
-                    <div class="bill-item">
-                        <div class="grid">
-                            <div class="col-6">
-                                <div class="info-group">
-                                    <label>账单日期:</label>
-                                    <span>${bill.bill_date}</span>
-                                </div>
-                                <div class="info-group">
-                                    <label>累计充电量:</label>
-                                    <span>${Utils.formatKwh(bill.total_kwh)}</span>
-                                </div>
-                                <div class="info-group">
-                                    <label>充电费用:</label>
-                                    <span>¥${Utils.formatMoney(bill.total_charge_fee)}</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="info-group">
-                                    <label>服务费用:</label>
-                                    <span>¥${Utils.formatMoney(bill.total_service_fee)}</span>
-                                </div>
-                                <div class="info-group">
-                                    <label>总费用:</label>
-                                    <span>¥${Utils.formatMoney(bill.total_fee)}</span>
-                                </div>
-                                <div class="info-group">
-                                    <button class="btn" onclick="loadBillDetails('${bill.bill_date}')">查看详情</button>
-                                </div>
-                            </div>
+            <div class="bill-item">
+                <div class="grid">
+                    <div class="col-6">
+                        <div class="info-group">
+                            <label>账单日期:</label>
+                            <span>${bill.bill_date || `${bill.year}-${String(bill.month).padStart(2, '0')}`}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>累计充电量:</label>
+                            <span>${Utils.formatKwh(bill.total_kwh)}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>充电费用:</label>
+                            <span>¥${Utils.formatMoney(bill.total_charge_fee)}</span>
                         </div>
                     </div>
-                `;
+                    <div class="col-6">
+                        <div class="info-group">
+                            <label>服务费用:</label>
+                            <span>¥${Utils.formatMoney(bill.total_service_fee)}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>总费用:</label>
+                            <span>¥${Utils.formatMoney(bill.total_fee)}</span>
+                        </div>
+                        <div class="info-group">
+                            <button class="btn" onclick="loadBillDetails('${bill.bill_date || `${bill.year}-${String(bill.month).padStart(2, '0')}`}')">查看详情</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
                     });
                 } else {
+                    console.warn('账单数据为空或格式不正确:', bills);
                     html += '<p class="error">无账单记录</p>';
                 }
                 html += '</div>';
 
                 billsListContainer.innerHTML = html;
+                console.log('账单列表已渲染到页面');
             } catch (error) {
                 console.error('加载账单列表失败:', error);
                 billsListContainer.innerHTML = '<p class="error">加载账单列表失败，请稍后再试</p>';
@@ -149,16 +157,84 @@
 
         // 加载账单详情
         async function loadBillDetails(billDate) {
+            const billsListContainer = document.getElementById('bills-list');
+            const detailView = document.getElementById('bill-detail-view');
             try {
                 // 获取指定日期的账单详情
-                const bill = await API.billing.get_user_bill(billDate);
+                const details = await API.billing.getUserBill(billDate);
+                console.log('获取到的账单详情数据:', details);
 
-                // 显示账单详情，这里可以弹出一个模态框显示详情，暂简单打印
-                console.log("账单详情:", bill);
+                // 构建详情HTML
+                let html = `
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 class="card-title">账单详情（${billDate}）</h2>
+            <button class="btn" id="back-to-list-btn">返回账单列表</button>
+        </div>
+        <div class="bills-info">
+            <table class="bills-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th>详单编号</th>
+                        <th>账单日期</th>
+                        <th>充电桩编号</th>
+                        <th>充电量</th>
+                        <th>充电时长</th>
+                        <th>开始时间</th>
+                        <th>结束时间</th>
+                        <th>充电费用</th>
+                        <th>服务费用</th>
+                        <th>总费用</th>
+                    </tr>
+                </thead>
+                <tbody>
+`;
+
+                if (Array.isArray(details) && details.length > 0) {
+                    details.forEach(detail => {
+                        html += `
+            <tr>
+                <td>${detail.detail_number || ''}</td>
+                <td>${detail.bill_date || billDate}</td>
+                <td>${detail.pile_code || ''}</td>
+                <td>${Utils.formatKwh(detail.charged_kwh)}</td>
+                <td>${detail.charging_time || ''} 分钟</td>
+                <td>${detail.start_time || ''}</td>
+                <td>${detail.end_time || ''}</td>
+                <td>¥${Utils.formatMoney(detail.charge_fee)}</td>
+                <td>¥${Utils.formatMoney(detail.service_fee)}</td>
+                <td>¥${Utils.formatMoney(detail.total_fee)}</td>
+            </tr>
+        `;
+                    });
+                } else {
+                    html += `<tr><td colspan="10" class="error">无账单详情记录</td></tr>`;
+                }
+                html += `
+                </tbody>
+            </table>
+        </div>
+    </div>
+`;
+
+                // 显示详情，隐藏列表
+                billsListContainer.style.display = 'none';
+                detailView.innerHTML = html;
+                detailView.style.display = '';
+
+                // 绑定返回按钮
+                document.getElementById('back-to-list-btn').onclick = function () {
+                    detailView.style.display = 'none';
+                    billsListContainer.style.display = '';
+                };
             } catch (error) {
                 console.error('加载账单详情失败:', error);
+                detailView.innerHTML = '<p class="error">加载账单详情失败，请稍后再试</p>';
+                detailView.style.display = '';
+                billsListContainer.style.display = 'none';
             }
         }
+    </script>
     </script>
 </body>
 
