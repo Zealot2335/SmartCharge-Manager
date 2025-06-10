@@ -190,7 +190,7 @@ function setupNavigation() {
         logoutLink.textContent = '退出登录';
         logoutLink.addEventListener('click', (e) => {
             e.preventDefault();
-            API.logout();
+            API.auth.logout();
             window.location.href = '/login.html';
         });
         logoutItem.appendChild(logoutLink);

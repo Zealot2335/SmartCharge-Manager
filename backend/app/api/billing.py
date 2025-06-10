@@ -94,15 +94,15 @@ async def get_bill_detail(
     
     return detail_info
 
-@router.get("/list/{month}", response_model=List[Dict[str, Any]])
+@router.get("/list/{year}-{month}", response_model=List[Dict[str, Any]])
 async def get_monthly_bills(
-    month: str,  # 格式: YYYY-MM
+    year: int,
+    month: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """获取用户指定月份的所有账单"""
     try:
-        year, month = map(int, month.split("-"))
         if month < 1 or month > 12:
             raise ValueError("月份必须在1-12之间")
     except ValueError:
@@ -150,7 +150,8 @@ async def get_monthly_bills(
         "bills": bill_list
     }
     
-    return summary
+    # 修改返回值为列表形式
+    return [summary]
 
 @router.get("/bills/{session_id}", response_model=Dict[str, Any])
 async def get_bill_by_session(

@@ -74,6 +74,7 @@ const request = async (endpoint, method = 'GET', data = null) => {
         }
     } catch (error) {
         console.error('API请求错误:', error);
+        // 可以在这里添加用户友好的提示，比如弹出模态框
         throw error;
     }
 };
@@ -89,6 +90,9 @@ const auth = {
      * @returns {Promise} 登录结果
      */
     login: async (username, password) => {
+        if (!username || !password) {
+            throw new Error('用户名和密码不能为空');
+        }
         // --- 修复开始 ---
         // 后端 OAuth2PasswordRequestForm 需要 application/x-www-form-urlencoded 格式
         const formData = new URLSearchParams();
@@ -131,6 +135,9 @@ const auth = {
      * @returns {Promise} 注册结果
      */
     register: (userData) => {
+        if (!userData) {
+            throw new Error('用户数据不能为空');
+        }
         return request('/auth/register', 'POST', userData);
     },
 
@@ -164,6 +171,24 @@ const auth = {
      */
     isAdmin: () => {
         return localStorage.getItem('user_role') === 'ADMIN';
+    },
+
+    /**
+     * 用户登出
+     */
+    logout: () => {
+        // 清除本地存储的凭证
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('user_role');
+
+        // 重置存储的变量
+        authToken = null;
+        userId = null;
+        userRole = null;
+
+        // 重定向到登录页面
+        window.location.href = '/login.html';
     }
 };
 
@@ -177,6 +202,9 @@ const charging = {
      * @returns {Promise} 创建结果
      */
     createRequest: (requestData) => {
+        if (!requestData) {
+            throw new Error('充电请求数据不能为空');
+        }
         return request('/charging/request', 'POST', requestData);
     },
 
@@ -196,6 +224,9 @@ const charging = {
      * @returns {Promise} 请求详情
      */
     getRequestDetails: (requestId) => {
+        if (!requestId) {
+            throw new Error('请求ID不能为空');
+        }
         return request(`/charging/${requestId}`, 'GET');
     },
 
@@ -205,6 +236,9 @@ const charging = {
      * @returns {Promise} 充电状态
      */
     getChargeState: (requestId) => {
+        if (!requestId) {
+            throw new Error('请求ID不能为空');
+        }
         return request(`/charging/${requestId}/state`, 'GET');
     },
 
@@ -215,6 +249,9 @@ const charging = {
      * @returns {Promise} 更新结果
      */
     updateRequest: (requestId, updateData) => {
+        if (!requestId || !updateData) {
+            throw new Error('请求ID和更新数据不能为空');
+        }
         return request(`/charging/${requestId}`, 'PATCH', updateData);
     },
 
@@ -224,6 +261,9 @@ const charging = {
      * @returns {Promise} 取消结果
      */
     cancelRequest: (requestId) => {
+        if (!requestId) {
+            throw new Error('请求ID不能为空');
+        }
         return request(`/charging/${requestId}`, 'DELETE');
     },
 
@@ -234,6 +274,9 @@ const charging = {
      * @returns {Promise} 更新后的请求对象
      */
     changeChargeMode: (requestId, newMode) => {
+        if (!requestId || !newMode) {
+            throw new Error('请求ID和新的充电模式不能为空');
+        }
         return request(`/charging/requests/${requestId}/mode`, 'PUT', { mode: newMode });
     },
 
@@ -244,6 +287,9 @@ const charging = {
      * @returns {Promise} 更新后的请求对象
      */
     changeChargeAmount: (requestId, newAmount) => {
+        if (!requestId || typeof newAmount !== 'number') {
+            throw new Error('请求ID和新的充电量不能为空，且充电量必须为数字');
+        }
         return request(`/charging/requests/${requestId}/amount`, 'PATCH', { amount_kwh: newAmount });
     },
 
@@ -253,6 +299,9 @@ const charging = {
      * @returns {Promise} 队列信息
      */
     getQueueInfo: (mode) => {
+        if (!mode) {
+            throw new Error('充电模式不能为空');
+        }
         return request(`/charging/queue/${mode}`, 'GET');
     },
 
@@ -271,6 +320,9 @@ const charging = {
      * @returns {Promise} 模拟结果
      */
     simulateCharging: (requestId, progress) => {
+        if (!requestId || typeof progress !== 'number') {
+            throw new Error('请求ID和进度百分比不能为空，且进度百分比必须为数字');
+        }
         return request(`/charging/${requestId}/simulate?progress=${progress}`, 'POST');
     }
 };
@@ -285,6 +337,9 @@ const billing = {
      * @returns {Promise} 账单数据
      */
     getDailyBill: (date) => {
+        if (!date) {
+            throw new Error('日期不能为空');
+        }
         return request(`/billing/daily/${date}`, 'GET');
     },
 
@@ -294,6 +349,9 @@ const billing = {
      * @returns {Promise} 账单详情
      */
     getBillDetails: (sessionId) => {
+        if (!sessionId) {
+            throw new Error('会话ID不能为空');
+        }
         console.log(`Getting bill details for session ID: ${sessionId}`);
         return request(`/billing/bills/${sessionId}`, 'GET');
     },
@@ -304,6 +362,9 @@ const billing = {
      * @returns {Promise} 详单信息
      */
     getDetailByNumber: (detailNumber) => {
+        if (!detailNumber) {
+            throw new Error('详单编号不能为空');
+        }
         return request(`/billing/details/${detailNumber}`, 'GET');
     },
 
@@ -313,6 +374,9 @@ const billing = {
      * @returns {Promise} 账单列表
      */
     getMonthlyBills: (month) => {
+        if (!month) {
+            throw new Error('月份不能为空');
+        }
         return request(`/billing/list/${month}`, 'GET');
     },
 
@@ -322,6 +386,9 @@ const billing = {
      * @returns {Promise} 账单数据
      */
     getUserBill: (billDate) => {
+        if (!billDate) {
+            throw new Error('日期不能为空');
+        }
         return request(`/billing/${billDate}`, 'GET');
     },
 
@@ -331,6 +398,9 @@ const billing = {
      * @returns {Promise} 账单详情
      */
     getBillBySession: (sessionId) => {
+        if (!sessionId) {
+            throw new Error('会话ID不能为空');
+        }
         return request(`/billing/bills/${sessionId}`, 'GET');
     }
 };
@@ -353,6 +423,9 @@ const admin = {
      * @returns {Promise} 更新结果
      */
     powerOnPile: (pileCode) => {
+        if (!pileCode) {
+            throw new Error('充电桩编号不能为空');
+        }
         return request(`/admin/pile/${pileCode}/poweron`, 'POST');
     },
 
@@ -363,6 +436,9 @@ const admin = {
      * @returns {Promise} 更新结果
      */
     shutdownPile: (pileCode, strategy = "priority") => {
+        if (!pileCode) {
+            throw new Error('充电桩编号不能为空');
+        }
         return request(`/admin/pile/${pileCode}/shutdown?strategy=${strategy}`, 'POST');
     },
 
